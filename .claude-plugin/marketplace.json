@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "tech-research",
-      "source": ".",
+      "source": "./",
       "description": "Dispatches parallel agents to Grok (X/Twitter), DeepWiki (GitHub repos), and WebSearch for comprehensive tech research",
       "version": "1.0.0",
       "category": "research",
