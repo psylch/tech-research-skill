@@ -1,5 +1,7 @@
 # tech-research
 
+[中文文档](README.zh.md)
+
 A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin for multi-source technical research. Dispatches parallel subagents to gather intelligence from three sources and synthesizes findings into a unified report.
 
 | Source | Tool | What It Provides |

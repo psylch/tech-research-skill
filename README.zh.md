@@ -1,5 +1,7 @@
 # tech-research
 
+[English](README.md)
+
 一个 [Claude Code](https://docs.anthropic.com/en/docs/claude-code) 插件，用于多源技术调研。通过并行派发子 agent 从三个数据源采集情报，并合成为统一的调研报告。
 
 | 数据源 | 工具 | 提供什么 |
