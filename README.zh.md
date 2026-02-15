@@ -1,6 +1,6 @@
 # tech-research
 
-一个 [Claude Code](https://docs.anthropic.com/en/docs/claude-code) 技能，用于多源技术调研。通过并行派发子 agent 从三个数据源采集情报，并合成为统一的调研报告。
+一个 [Claude Code](https://docs.anthropic.com/en/docs/claude-code) 插件，用于多源技术调研。通过并行派发子 agent 从三个数据源采集情报，并合成为统一的调研报告。
 
 | 数据源 | 工具 | 提供什么 |
 |--------|------|----------|
@@ -10,15 +10,28 @@
 
 ## 安装
 
+### 通过 Plugin Marketplace 安装（推荐）
+
+在 Claude Code 中添加市场并安装：
+
+```shell
+/plugin marketplace add psylch/tech-research-skill
+/plugin install tech-research@psylch-tech-research-skill
+```
+
+### 手动安装
+
 ```bash
 git clone https://github.com/psylch/tech-research-skill.git ~/.claude/skills/tech-research
 ```
+
+> 注意：手动安装会放到旧的 `~/.claude/skills/` 路径。推荐使用 plugin 方式以获得自动更新和可发现性。
 
 安装后重启 Claude Code。
 
 ## 前置要求
 
-- **Claude Code**，需要有 Task 工具权限（用于派发子 agent）
+- **Claude Code** v1.0.33+（需要 plugin 支持）
 - **Playwright MCP**，配置 `--user-data-dir` 以保持 Grok 登录状态（可选——Grok 不可用时自动跳过）
 - **DeepWiki MCP**，用于 GitHub 仓库分析（可选）
 
@@ -74,19 +87,26 @@ compare libraries: Vite vs Turbopack
 ## 文件结构
 
 ```
-tech-research/
-├── SKILL.md                          # 主技能定义
-├── references/
-│   ├── subagent_templates.md         # 各子 agent 的完整提示词模板
-│   └── query_strategies.md           # Grok 查询策略（5 种模式）
-└── scripts/
-    ├── grok_preflight.sh             # Grok 可用性预检脚本
-    └── grok_update_status.sh         # 跟踪 Grok 登录状态
+tech-research-skill/
+├── .claude-plugin/
+│   └── plugin.json                   # 插件清单
+├── skills/
+│   └── tech-research/
+│       ├── SKILL.md                  # 主技能定义
+│       ├── references/
+│       │   ├── subagent_templates.md # 各子 agent 的提示词模板
+│       │   └── query_strategies.md   # Grok 查询策略
+│       └── scripts/
+│           ├── grok_preflight.sh     # Grok 可用性预检
+│           └── grok_update_status.sh # 跟踪 Grok 登录状态
+├── README.md
+├── README.zh.md
+└── LICENSE
 ```
 
 ## 可选：ask-grok 技能
 
-本技能可选地委托 [ask-grok](https://github.com/nicobailon/ask-grok-claude-code) 技能来追踪 Grok 登录状态。如果未安装 ask-grok，会退化为每次通过 Playwright 截图检查登录状态。
+本插件可选地委托 [ask-grok](https://github.com/nicobailon/ask-grok-claude-code) 技能来追踪 Grok 登录状态。如果未安装 ask-grok，会退化为每次通过 Playwright 截图检查登录状态。
 
 ## 许可
 

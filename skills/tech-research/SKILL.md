@@ -111,7 +111,7 @@ For crafting effective Grok queries, see [references/query_strategies.md](refere
 Before dispatching a Grok subagent, run the pre-flight check:
 
 ```bash
-bash ~/.claude/skills/tech-research/scripts/grok_preflight.sh
+bash ${CLAUDE_PLUGIN_ROOT}/skills/tech-research/scripts/grok_preflight.sh
 ```
 
 | Exit Code | Action |

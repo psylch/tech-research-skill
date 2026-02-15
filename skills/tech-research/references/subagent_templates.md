@@ -11,7 +11,7 @@ Research a technical topic using Grok (grok.com) via Playwright browser automati
 [RESEARCH_QUESTION — e.g., "What are iOS developers saying about SwiftData vs Core Data?"]
 
 ## Pre-flight
-Run: bash ~/.claude/skills/tech-research/scripts/grok_preflight.sh
+Run: bash ${CLAUDE_PLUGIN_ROOT}/skills/tech-research/scripts/grok_preflight.sh
 - Exit 0 (READY): proceed to Step 1
 - Exit 1 (NEEDS_LOGIN): proceed to Step 1, verify login in snapshot
 - Exit 2 (NOT_CONFIGURED): return "BLOCKED: MCP not configured"
@@ -23,7 +23,7 @@ Run: bash ~/.claude/skills/tech-research/scripts/grok_preflight.sh
 1. Use ToolSearch to load Playwright tools (query: "+playwright navigate snapshot click type")
 2. Navigate to https://grok.com (in a new tab if one is already open)
 3. Take a snapshot — if `link "Sign in"` visible (not logged in):
-   - Run: bash ~/.claude/skills/tech-research/scripts/grok_update_status.sh logout
+   - Run: bash ${CLAUDE_PLUGIN_ROOT}/skills/tech-research/scripts/grok_update_status.sh logout
    - Return: "BLOCKED: Grok session expired. User needs to log in once in the Playwright browser window."
 
 ## Step 2: Query Grok
@@ -69,7 +69,7 @@ The Grok query to use:
 
 ## Step 3: Report
 10. For 2-3 X post URLs in the response, navigate to verify they exist and content matches
-11. Run: bash ~/.claude/skills/tech-research/scripts/grok_update_status.sh login
+11. Run: bash ${CLAUDE_PLUGIN_ROOT}/skills/tech-research/scripts/grok_update_status.sh login
 12. Return findings in this format:
 
 ### Grok Findings: [Topic]
