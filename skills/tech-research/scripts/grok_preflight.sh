@@ -1,17 +1,9 @@
 #!/bin/bash
-# Pre-flight check for Grok source in tech-research skill
-# Delegates to ask-grok's preflight if available, otherwise checks directly
-# Exit codes: 0 = ready, 1 = needs login, 2 = needs MCP config, 3 = grok skill missing
+# Pre-flight check for Grok source in tech-research plugin
+# Exit codes: 0 = ready, 1 = needs login check, 2 = needs MCP config
 
-ASK_GROK_DIR="$HOME/.claude/skills/ask-grok"
-ASK_GROK_PREFLIGHT="$ASK_GROK_DIR/scripts/preflight.sh"
-
-# Prefer delegating to ask-grok's preflight
-if [ -f "$ASK_GROK_PREFLIGHT" ]; then
-    exec bash "$ASK_GROK_PREFLIGHT"
-fi
-
-# Fallback: check MCP config directly
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+STATUS_FILE="$SCRIPT_DIR/../.grok-status.json"
 CLAUDE_JSON="$HOME/.claude.json"
 
 if [ ! -f "$CLAUDE_JSON" ]; then
@@ -36,7 +28,28 @@ if [ "$HAS_PLAYWRIGHT" != "True" ]; then
     exit 2
 fi
 
-# MCP is configured but we can't check login without ask-grok's status.json
+# Check persisted login status
+if [ -f "$STATUS_FILE" ]; then
+    LOGGED_IN=$(python3 -c "
+import json, time
+data = json.load(open('$STATUS_FILE'))
+status = data.get('status', 'unknown')
+ts = data.get('timestamp', 0)
+age_hours = (time.time() - ts) / 3600
+# Consider status stale after 24 hours
+if age_hours > 24:
+    print('stale')
+else:
+    print(status)
+" 2>/dev/null)
+
+    if [ "$LOGGED_IN" = "login" ]; then
+        echo "STATUS: READY"
+        echo "ACTION: Playwright MCP configured, Grok login recently verified."
+        exit 0
+    fi
+fi
+
 echo "STATUS: NEEDS_LOGIN"
-echo "ACTION: ask-grok skill not found at $ASK_GROK_DIR. Install it for persistent login tracking, or verify login in Playwright snapshot."
+echo "ACTION: Playwright MCP configured. Verify Grok login in Playwright snapshot."
 exit 1

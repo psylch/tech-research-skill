@@ -104,10 +104,6 @@ tech-research-skill/
 └── LICENSE
 ```
 
-## Optional: ask-grok Skill
-
-This plugin optionally delegates to the [ask-grok](https://github.com/nicobailon/ask-grok-claude-code) skill for Grok login state tracking. If `ask-grok` is not installed, the plugin falls back to checking login via Playwright snapshots each time.
-
 ## License
 
 MIT

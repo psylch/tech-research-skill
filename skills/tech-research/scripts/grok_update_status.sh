@@ -1,15 +1,25 @@
 #!/bin/bash
-# Update Grok login status for tech-research skill
-# Delegates to ask-grok's update_status if available
+# Update Grok login status for tech-research plugin
 # Usage:
 #   scripts/grok_update_status.sh login    — mark as logged in
 #   scripts/grok_update_status.sh logout   — mark as logged out
 
-ASK_GROK_UPDATE="$HOME/.claude/skills/ask-grok/scripts/update_status.sh"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+STATUS_FILE="$SCRIPT_DIR/../.grok-status.json"
 
-if [ -f "$ASK_GROK_UPDATE" ]; then
-    exec bash "$ASK_GROK_UPDATE" "$1"
+if [ -z "$1" ]; then
+    echo "Usage: grok_update_status.sh [login|logout]"
+    exit 1
 fi
 
-echo "WARN: ask-grok skill not installed. Login status not persisted."
-echo "Grok queries will verify login via Playwright snapshot each time."
+python3 -c "
+import json, time
+data = {'status': '$1', 'timestamp': time.time()}
+with open('$STATUS_FILE', 'w') as f:
+    json.dump(data, f)
+print('Grok status updated: $1')
+" 2>/dev/null
+
+if [ $? -ne 0 ]; then
+    echo "WARN: Could not persist login status. Grok login will be verified via Playwright snapshot."
+fi

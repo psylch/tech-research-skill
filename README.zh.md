@@ -104,10 +104,6 @@ tech-research-skill/
 └── LICENSE
 ```
 
-## 可选：ask-grok 技能
-
-本插件可选地委托 [ask-grok](https://github.com/nicobailon/ask-grok-claude-code) 技能来追踪 Grok 登录状态。如果未安装 ask-grok，会退化为每次通过 Playwright 截图检查登录状态。
-
 ## 许可
 
 MIT
