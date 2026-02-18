@@ -7,7 +7,30 @@ description: Comprehensive technical research by combining multiple intelligence
 
 Orchestrate multi-source technical research by dispatching parallel subagents to gather intelligence from X/Twitter (via Grok), GitHub repositories (via DeepWiki), and the web (via WebSearch). Synthesize all findings into a single actionable report.
 
-**Architecture:** The main agent orchestrates research by dispatching up to 3 parallel subagents. Each subagent handles one data source to keep the main context clean.
+**Architecture:** The main agent orchestrates research using one of two modes — lightweight (Task Subagents) or heavyweight (Agent Teammates) — chosen based on research complexity.
+
+## Research Mode Selection
+
+Before dispatching any agents, determine the appropriate mode:
+
+| Signal | → Mode |
+|--------|--------|
+| Single topic, multiple data sources (Grok + DeepWiki + WebSearch) | **Light** → Task Subagents |
+| Multiple independent topics/competitors needing cross-comparison | **Heavy** → Agent Teammates |
+| Research may produce follow-up questions requiring dynamic re-scoping | **Heavy** → Agent Teammates |
+| Agent count ≥ 4 | **Heavy** → Agent Teammates |
+
+### Light Mode (default for single-topic research)
+
+Dispatch up to 3 Task Subagents (`Task` with `subagent_type: "general-purpose"`). Each handles one data source independently. The main agent synthesizes results after all return.
+
+### Heavy Mode (for multi-topic / competitive research)
+
+Use `TeamCreate` to create a research team → `TaskCreate` for each research task → spawn Agent Teammates (via `Task` with `team_name` and `name` parameters) → coordinate via `SendMessage`. Teammates can:
+
+- Communicate to avoid duplication ("I found Project A uses the same approach as B — focus on their differentiators")
+- Share discoveries across tasks ("The blog post I found compares all 3 frameworks, sending you the link")
+- Dynamically adjust scope based on what others have found
 
 ## When to Use
 
@@ -45,7 +68,11 @@ Not every research task needs all 3 sources. Select sources based on the questio
 | "Compare X vs Y performance" | Maybe | Yes (both repos) | Yes |
 | "What's new in framework X?" | Yes | No | Yes |
 
-### 2. Dispatch Parallel Subagents
+### 2. Dispatch Research Agents
+
+Choose the dispatch method based on the research mode selected above.
+
+#### Light Mode: Task Subagents
 
 Launch subagents concurrently using `Task`. See [references/subagent_templates.md](references/subagent_templates.md) for complete prompt templates.
 
@@ -63,6 +90,21 @@ Task(subagent_type: "general-purpose", description: "DeepWiki research [repo]", 
 ```
 Task(subagent_type: "general-purpose", description: "Web research [topic]", prompt: <websearch_template>)
 ```
+
+#### Heavy Mode: Agent Teammates
+
+```
+1. TeamCreate(team_name: "research-[topic]")
+2. TaskCreate(subject: "Research [Project A]", description: "...", activeForm: "Researching [Project A]")
+3. TaskCreate(subject: "Research [Project B]", description: "...", activeForm: "Researching [Project B]")
+4. Task(subagent_type: "general-purpose", team_name: "research-[topic]", name: "researcher-a", prompt: "...")
+5. Task(subagent_type: "general-purpose", team_name: "research-[topic]", name: "researcher-b", prompt: "...")
+6. Coordinate via SendMessage — share findings, adjust scope, avoid duplication
+7. Synthesize after all teammates report back
+8. Shutdown teammates and TeamDelete when done
+```
+
+Each teammate should use all relevant data sources (Grok, DeepWiki, WebSearch) for their assigned topic, rather than splitting by data source.
 
 ### 3. Synthesize and Report
 
