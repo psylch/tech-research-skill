@@ -2,7 +2,7 @@
 
 [中文文档](README.zh.md)
 
-A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin for multi-source technical research. Dispatches parallel subagents to gather intelligence from three sources and synthesizes findings into a unified report.
+A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin for multi-source technical research. Gathers intelligence from three sources and synthesizes findings into a unified report — using lightweight subagents for simple queries or coordinated agent teammates for heavy competitive research.
 
 | Source | Tool | What It Provides |
 |--------|------|------------------|
@@ -67,8 +67,18 @@ evaluate framework: SolidJS
 ## How It Works
 
 1. **Analyze** — breaks the research question into sub-queries for each source
-2. **Dispatch** — launches up to 3 parallel subagents (Grok, DeepWiki, WebSearch)
-3. **Synthesize** — merges findings into a structured report with TL;DR, comparison matrix, and actionable recommendation
+2. **Select mode** — chooses Light or Heavy mode based on research complexity
+3. **Dispatch** — launches research agents in the appropriate mode
+4. **Synthesize** — merges findings into a structured report with TL;DR, comparison matrix, and actionable recommendation
+
+### Research Modes
+
+| Signal | Mode |
+|--------|------|
+| Single topic, multiple data sources | **Light** — up to 3 parallel Task Subagents, each handling one data source |
+| Multiple topics/competitors needing cross-comparison | **Heavy** — Agent Teammates that can communicate, share discoveries, and avoid duplication |
+| Research may require dynamic re-scoping | **Heavy** |
+| Agent count ≥ 4 | **Heavy** |
 
 Not every research task uses all 3 sources. The skill selects sources based on the question type:
 

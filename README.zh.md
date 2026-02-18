@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-一个 [Claude Code](https://docs.anthropic.com/en/docs/claude-code) 插件，用于多源技术调研。通过并行派发子 agent 从三个数据源采集情报，并合成为统一的调研报告。
+一个 [Claude Code](https://docs.anthropic.com/en/docs/claude-code) 插件，用于多源技术调研。从三个数据源采集情报并合成为统一报告——简单查询用轻量子 agent（Task Subagent），重度竞品调研用可互相协作的 Agent Teammate。
 
 | 数据源 | 工具 | 提供什么 |
 |--------|------|----------|
@@ -67,8 +67,18 @@ compare libraries: Vite vs Turbopack
 ## 工作原理
 
 1. **分析** — 将调研问题拆解为各数据源的子查询
-2. **派发** — 并行启动最多 3 个子 agent（Grok、DeepWiki、WebSearch）
-3. **合成** — 合并发现为结构化报告，包含 TL;DR、对比矩阵和可执行建议
+2. **选模式** — 根据调研复杂度选择 Light 或 Heavy 模式
+3. **派发** — 以对应模式启动调研 agent
+4. **合成** — 合并发现为结构化报告，包含 TL;DR、对比矩阵和可执行建议
+
+### 调研模式
+
+| 信号 | 模式 |
+|------|------|
+| 单一主题，多数据源 | **Light** — 最多 3 个并行 Task Subagent，各查一个数据源 |
+| 多个主题/竞品需要交叉比较 | **Heavy** — Agent Teammate，可互相通信、共享发现、避免重复 |
+| 调研过程可能需要动态调整范围 | **Heavy** |
+| agent 数量 ≥ 4 | **Heavy** |
 
 不是每次调研都需要全部 3 个数据源。技能会根据问题类型选择：
 
