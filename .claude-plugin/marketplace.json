@@ -1,0 +1,20 @@
+{
+  "name": "psylch-tech-research-skill",
+  "owner": {
+    "name": "psylch"
+  },
+  "metadata": {
+    "description": "Multi-source tech research plugin for Claude Code"
+  },
+  "plugins": [
+    {
+      "name": "tech-research",
+      "source": "./",
+      "description": "Dispatches parallel agents to Grok (X/Twitter), DeepWiki (GitHub repos), and WebSearch for comprehensive tech research",
+      "version": "1.0.0",
+      "category": "research",
+      "tags": ["research", "grok", "deepwiki", "twitter", "competitive-analysis"],
+      "homepage": "https://github.com/psylch/tech-research-skill"
+    }
+  ]
+}

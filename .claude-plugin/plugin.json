@@ -1,0 +1,12 @@
+{
+  "name": "tech-research",
+  "description": "Multi-source tech research — dispatches parallel agents to Grok (X/Twitter), DeepWiki (GitHub repos), and WebSearch, then synthesizes findings into a unified report",
+  "version": "1.0.0",
+  "author": {
+    "name": "psylch"
+  },
+  "homepage": "https://github.com/psylch/tech-research-skill",
+  "repository": "https://github.com/psylch/tech-research-skill",
+  "license": "MIT",
+  "keywords": ["research", "grok", "deepwiki", "twitter", "tech-research", "competitive-analysis"]
+}
