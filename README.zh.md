@@ -12,8 +12,17 @@
 
 ## 安装
 
+### 通过 skills.sh 安装（推荐）
+
 ```bash
 npx skills add psylch/tech-research-skill -g -y
+```
+
+### 通过 Claude Code Plugin Marketplace 安装
+
+```shell
+/plugin marketplace add psylch/tech-research-skill
+/plugin install tech-research@psylch-tech-research-skill
 ```
 
 安装后重启 Claude Code。

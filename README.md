@@ -12,8 +12,17 @@ A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skill for multi-
 
 ## Installation
 
+### Via skills.sh (recommended)
+
 ```bash
 npx skills add psylch/tech-research-skill -g -y
+```
+
+### Via Claude Code Plugin Marketplace
+
+```shell
+/plugin marketplace add psylch/tech-research-skill
+/plugin install tech-research@psylch-tech-research-skill
 ```
 
 Restart Claude Code after installation.
