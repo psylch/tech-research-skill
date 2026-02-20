@@ -4,40 +4,58 @@ Complete prompt templates for dispatching research subagents. Copy and customize
 
 ## Grok Subagent Template
 
+The Grok subagent receives a `BACKEND` parameter that determines which browser tools to use. Replace `[BACKEND]` with the value from `grok_setup.sh check`.
+
 ```
-Research a technical topic using Grok (grok.com) via Playwright browser automation.
+Research a technical topic using Grok (grok.com) via browser automation.
 
 ## Your Task
 [RESEARCH_QUESTION — e.g., "What are iOS developers saying about SwiftData vs Core Data?"]
 
-## Pre-flight
-Run: bash ${CLAUDE_PLUGIN_ROOT}/skills/tech-research/scripts/grok_preflight.sh
-- Exit 0 (READY): proceed to Step 1
-- Exit 1 (NEEDS_LOGIN): proceed to Step 1, verify login in snapshot
-- Exit 2 (NOT_CONFIGURED): return "BLOCKED: MCP not configured"
-- Any other: return "BLOCKED: [error message]"
+## Browser Backend: [BACKEND]
 
-## Step 1: Open a Fresh Grok Page
+Use the following tools based on your assigned backend:
+
+### If BACKEND=chrome (Claude-in-Chrome)
+1. Use ToolSearch("+claude-in-chrome") to load browser tools
+2. Use mcp__claude-in-chrome__navigate to open https://grok.com
+3. Use mcp__claude-in-chrome__read_page to check page state
+4. Use mcp__claude-in-chrome__form_input to type queries
+5. Use mcp__claude-in-chrome__computer to click buttons
+
+### If BACKEND=playwright-grok
+1. Use ToolSearch("+playwright-grok") to load browser tools
+2. Use mcp__playwright-grok__browser_navigate to open https://grok.com
+3. Use mcp__playwright-grok__browser_snapshot to check page state
+4. Use mcp__playwright-grok__browser_fill_form or mcp__playwright-grok__browser_evaluate to type queries
+5. Use mcp__playwright-grok__browser_click to click buttons
+
+### If BACKEND=playwright
+1. Use ToolSearch("+playwright") to load browser tools
+2. Use mcp__playwright__browser_navigate to open https://grok.com
+3. Use mcp__playwright__browser_snapshot to check page state
+4. Use mcp__playwright__browser_fill_form or mcp__playwright__browser_evaluate to type queries
+5. Use mcp__playwright__browser_click to click buttons
+
+## Step 1: Open Grok and Check Login
+
 **IMPORTANT: Always start a NEW tab/page for each Grok query. Do NOT ask multiple questions in the same Grok session** — follow-up questions in the same chat degrade answer quality and may hit rate limits. One query per page, then close/leave it.
 
-1. Use ToolSearch to load Playwright tools (query: "+playwright navigate snapshot click type")
-2. Navigate to https://grok.com (in a new tab if one is already open)
-3. Take a snapshot — if `link "Sign in"` visible (not logged in):
-   - Run: bash ${CLAUDE_PLUGIN_ROOT}/skills/tech-research/scripts/grok_update_status.sh logout
-   - Return: "BLOCKED: Grok session expired. User needs to log in once in the Playwright browser window."
+1. Load browser tools using ToolSearch as described above for your backend
+2. Navigate to https://grok.com
+3. Check the page state (snapshot/read_page):
+   - If "Sign in" link/button is visible → NOT logged in:
+     - Run: bash ${SKILL_PATH}/scripts/grok_setup.sh status logged_out [BACKEND]
+     - Return: "GROK_SKIPPED: Not logged in. User should log into grok.com in [browser description], then run `grok_setup.sh reset`."
+   - If chat interface is visible → logged in, proceed to Step 2
 
 ## Step 2: Query Grok
-4. Click "Model select" button, then click the "Fast" menu item
-5. Fill the chat input (it's a contenteditable div, NOT a standard input):
-   ```js
-   async (page) => {
-     const editor = await page.$('[contenteditable="true"]');
-     await editor.click();
-     await editor.fill('[GROK_QUERY]');
-     return 'Filled';
-   }
-   ```
-6. Take a snapshot to find the "Submit" button ref, then click it
+
+1. Select "Fast" model if a model selector is available
+2. Fill the chat input with your query (see query crafting rules below)
+3. Submit the query
+4. Wait for response (8-10 seconds)
+5. Read the full response. If still generating, wait 5s and read again.
 
 ### CRITICAL: Grok Query Crafting Rules
 
@@ -63,14 +81,14 @@ The Grok query to use:
 [GROK_QUERY — MUST contain X/Twitter-scoping keywords per rules above]
 ---
 
-7. Wait for response: use browser_run_code with page.waitForTimeout(8000)
-8. Take a snapshot to read the full response
-9. If "Stop model response" button is still visible, wait 5s and snapshot again
-
 ## Step 3: Report
-10. For 2-3 X post URLs in the response, navigate to verify they exist and content matches
-11. Run: bash ${CLAUDE_PLUGIN_ROOT}/skills/tech-research/scripts/grok_update_status.sh login
-12. Return findings in this format:
+
+1. For 2-3 X post URLs in the response, navigate to verify they exist and content matches
+2. Update login status:
+   ```bash
+   bash ${SKILL_PATH}/scripts/grok_setup.sh status logged_in [BACKEND]
+   ```
+3. Return findings in this format:
 
 ### Grok Findings: [Topic]
 #### Key Findings
