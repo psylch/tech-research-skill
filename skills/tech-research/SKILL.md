@@ -68,14 +68,33 @@ Before dispatching a Grok subagent, run the pre-flight check to detect the best 
 bash ${SKILL_PATH}/scripts/grok_setup.sh check
 ```
 
-The script outputs two key values:
-- `BACKEND=chrome|playwright-grok|playwright|none` — which browser backend to use
-- `LOGIN_STATUS=logged_in|logged_out|unknown` — cached login state
+The script outputs standard preflight JSON on stdout:
+```json
+{
+  "ready": true,
+  "backend": "chrome",
+  "login_status": "logged_in",
+  "dependencies": {
+    "browser_mcp": {"status": "ok", "backend": "chrome"}
+  },
+  "credentials": {
+    "grok_login": {"status": "logged_in"}
+  },
+  "services": {},
+  "hint": "Grok ready via chrome backend"
+}
+```
+
+Parse the JSON fields:
+- `ready` (boolean) — whether a backend is available
+- `backend` — which browser backend to use (`chrome`, `playwright-grok`, `playwright`, `none`)
+- `login_status` — cached login state (`logged_in`, `logged_out`, `unknown`)
+- `hint` — human-readable summary of the status
 
 | Exit Code | Meaning | Action |
 |-----------|---------|--------|
-| `0` READY | Backend available | Pass `BACKEND` value to Grok subagent. If `LOGIN_STATUS=logged_out`, skip Grok and note in report. Otherwise dispatch subagent (optimistic). |
-| `1` NEEDS_SETUP | Has playwright, no playwright-grok | Run `grok_setup.sh setup` to create dedicated instance, then ask user to restart Claude Code. Meanwhile, dispatch with `BACKEND=playwright` if needed. |
+| `0` READY | Backend available | Pass `backend` value to Grok subagent. If `login_status` is `logged_out`, skip Grok and note in report. Otherwise dispatch subagent (optimistic). |
+| `1` NEEDS_SETUP | Has playwright, no playwright-grok | Run `grok_setup.sh setup` to create dedicated instance, then ask user to restart Claude Code. Meanwhile, dispatch with `backend=playwright` if needed. |
 | `2` NOT_AVAILABLE | No browser MCP at all | Skip Grok source entirely. Note in report. |
 
 ### Login Status Cache

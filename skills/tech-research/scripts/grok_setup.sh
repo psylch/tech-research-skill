@@ -2,15 +2,16 @@
 # Grok browser backend detection, setup, and login status management
 #
 # Usage:
-#   grok_setup.sh check    — Detect best available browser backend + login status
-#   grok_setup.sh setup    — Create playwright-grok MCP from existing playwright config
-#   grok_setup.sh reset    — Clear cached login status (after user re-logs in)
+#   grok_setup.sh check      — Detect best available browser backend + login status (JSON)
+#   grok_setup.sh preflight  — Alias for check
+#   grok_setup.sh setup      — Create playwright-grok MCP from existing playwright config
+#   grok_setup.sh reset      — Clear cached login status (after user re-logs in)
 #   grok_setup.sh status <logged_in|logged_out>  — Update login status cache
 #
-# Check exit codes:
-#   0  READY         — Backend available (BACKEND= chrome | playwright-grok | playwright)
-#   1  NEEDS_SETUP   — Has playwright, can run 'setup' to create playwright-grok
-#   2  NOT_AVAILABLE  — No browser backend found, skip Grok source
+# Exit codes:
+#   0  Success / READY
+#   1  Recoverable error (e.g., needs setup, missing args)
+#   2  Unrecoverable error (no browser backend available)
 #
 # Status file: ~/.claude/tech-research/.grok-status.json
 
@@ -27,6 +28,17 @@ LOGOUT_EXPIRY_HOURS=2
 
 ensure_status_dir() {
     mkdir -p "$STATUS_DIR"
+}
+
+emit_error() {
+    local error="$1"
+    local hint="$2"
+    local recoverable="${3:-true}"
+    _ERR="$error" _HINT="$hint" _REC="$recoverable" python3 -c "
+import json, os
+rec = os.environ['_REC'] == 'true'
+print(json.dumps({'error': os.environ['_ERR'], 'hint': os.environ['_HINT'], 'recoverable': rec}))
+" >&2
 }
 
 read_mcp_servers() {
@@ -102,60 +114,93 @@ with open('$STATUS_FILE', 'w') as f:
 # --- Commands ---
 
 cmd_check() {
+    local login_status
+    local backend
+    local ready
+    local hint
+    local exit_code
+
     # Priority 1: claude-in-chrome (user's real Chrome, has login state)
     if has_mcp_server "claude-in-chrome"; then
-        local login_status
         login_status=$(read_login_status)
-        echo "BACKEND=chrome"
-        echo "LOGIN_STATUS=$login_status"
-        echo "STATUS: READY"
-        echo "ACTION: Use claude-in-chrome tools for Grok queries."
-        exit 0
-    fi
+        backend="chrome"
+        ready=true
+        hint="Grok ready via chrome backend"
+        exit_code=0
 
     # Priority 2: playwright-grok (dedicated profile with login persistence)
-    if has_mcp_server "playwright-grok"; then
-        local login_status
+    elif has_mcp_server "playwright-grok"; then
         login_status=$(read_login_status)
-        echo "BACKEND=playwright-grok"
-        echo "LOGIN_STATUS=$login_status"
-        echo "STATUS: READY"
-        echo "ACTION: Use playwright-grok tools for Grok queries."
-        exit 0
-    fi
+        backend="playwright-grok"
+        ready=true
+        hint="Grok ready via playwright-grok backend"
+        exit_code=0
 
     # Priority 3: playwright (default, no profile — works but may not be logged in)
-    if has_mcp_server "playwright"; then
-        echo "BACKEND=playwright"
-        echo "LOGIN_STATUS=unknown"
-        echo "STATUS: NEEDS_SETUP"
-        echo "ACTION: Has playwright MCP. Run 'grok_setup.sh setup' to create a dedicated playwright-grok instance with login persistence."
-        exit 1
-    fi
+    elif has_mcp_server "playwright"; then
+        login_status="unknown"
+        backend="playwright"
+        ready=false
+        hint="Has playwright MCP. Run 'grok_setup.sh setup' to create a dedicated playwright-grok instance with login persistence."
+        exit_code=1
 
     # Nothing available
-    echo "BACKEND=none"
-    echo "LOGIN_STATUS=unknown"
-    echo "STATUS: NOT_AVAILABLE"
-    echo "ACTION: No browser MCP configured. Install Playwright MCP or Claude-in-Chrome extension to enable Grok source."
-    exit 2
+    else
+        login_status="unknown"
+        backend="none"
+        ready=false
+        hint="No browser MCP configured. Install Playwright MCP or Claude-in-Chrome extension to enable Grok source."
+        exit_code=2
+    fi
+
+    # Build and output standard preflight JSON
+    _READY="$ready" _BACKEND="$backend" _LOGIN="$login_status" _HINT="$hint" python3 -c "
+import json, os
+ready = os.environ['_READY'] == 'true'
+backend = os.environ['_BACKEND']
+login_status = os.environ['_LOGIN']
+hint = os.environ['_HINT']
+result = {
+    'ready': ready,
+    'backend': backend,
+    'login_status': login_status,
+    'dependencies': {
+        'browser_mcp': {
+            'status': 'ok' if ready else 'missing',
+            'backend': backend
+        }
+    },
+    'credentials': {
+        'grok_login': {
+            'status': login_status
+        }
+    },
+    'services': {},
+    'hint': hint
+}
+print(json.dumps(result, indent=2))
+"
+    exit "$exit_code"
 }
 
 cmd_setup() {
     if ! [ -f "$CLAUDE_JSON" ]; then
-        echo "ERROR: $CLAUDE_JSON not found."
-        exit 1
+        emit_error "~/.claude.json not found" "Ensure Claude Code is installed and has been run at least once" "false"
+        exit 2
     fi
 
     if has_mcp_server "playwright-grok"; then
-        echo "playwright-grok already configured in $CLAUDE_JSON. No action needed."
+        python3 -c "
+import json
+print(json.dumps({'hint': 'playwright-grok already configured. No action needed.'}, indent=2))
+"
         exit 0
     fi
 
     local pw_config
     pw_config=$(get_playwright_config)
     if [ -z "$pw_config" ]; then
-        echo "ERROR: No 'playwright' MCP server found in $CLAUDE_JSON. Configure playwright MCP first."
+        emit_error "No playwright MCP server found" "Configure playwright MCP in ~/.claude.json first, then re-run setup" "true"
         exit 1
     fi
 
@@ -181,13 +226,14 @@ config['mcpServers']['playwright-grok'] = grok
 with open('$CLAUDE_JSON', 'w') as f:
     json.dump(config, f, indent=2)
 
-print('SUCCESS: Added playwright-grok to $CLAUDE_JSON')
-print('  Profile dir: $HOME/.playwright-grok-profile')
-print('  Restart Claude Code to activate the new MCP server.')
+print(json.dumps({
+    'hint': 'Added playwright-grok to ~/.claude.json. Restart Claude Code to activate.',
+    'profile_dir': '$HOME/.playwright-grok-profile'
+}, indent=2))
 " 2>/dev/null
 
     if [ $? -ne 0 ]; then
-        echo "ERROR: Failed to update $CLAUDE_JSON."
+        emit_error "Failed to update ~/.claude.json" "Check file permissions and JSON validity" "true"
         exit 1
     fi
 }
@@ -195,9 +241,9 @@ print('  Restart Claude Code to activate the new MCP server.')
 cmd_reset() {
     if [ -f "$STATUS_FILE" ]; then
         rm -f "$STATUS_FILE"
-        echo "Login status cache cleared. Next Grok query will check login state fresh."
+        python3 -c "import json; print(json.dumps({'hint': 'Login status cache cleared. Next Grok query will check login state fresh.'}, indent=2))"
     else
-        echo "No cached login status to clear."
+        python3 -c "import json; print(json.dumps({'hint': 'No cached login status to clear.'}, indent=2))"
     fi
 }
 
@@ -205,27 +251,22 @@ cmd_status() {
     local new_status="${1:-}"
     local backend="${2:-}"
     if [ -z "$new_status" ]; then
-        echo "Usage: grok_setup.sh status <logged_in|logged_out> [backend]"
+        emit_error "Missing status argument" "Usage: grok_setup.sh status <logged_in|logged_out> [backend]" "true"
         exit 1
     fi
     write_login_status "$new_status" "$backend"
-    echo "Login status updated: $new_status (backend: ${backend:-unspecified})"
+    python3 -c "import json; print(json.dumps({'hint': 'Login status updated: $new_status (backend: ${backend:-unspecified})'}, indent=2))"
 }
 
 # --- Main ---
 
 case "${1:-}" in
-    check)  cmd_check ;;
+    check|preflight)  cmd_check ;;
     setup)  cmd_setup ;;
     reset)  cmd_reset ;;
     status) cmd_status "${2:-}" "${3:-}" ;;
     *)
-        echo "Usage: grok_setup.sh <check|setup|reset|status>"
-        echo ""
-        echo "  check   — Detect best browser backend and login status"
-        echo "  setup   — Create playwright-grok MCP from existing playwright"
-        echo "  reset   — Clear cached login status"
-        echo "  status  — Update login status (logged_in|logged_out)"
+        emit_error "Unknown subcommand: ${1:-}" "Valid subcommands: check, preflight, setup, reset, status" "true"
         exit 1
         ;;
 esac
