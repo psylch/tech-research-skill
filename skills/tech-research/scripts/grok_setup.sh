@@ -26,6 +26,14 @@ LOGOUT_EXPIRY_HOURS=2
 
 # --- Helpers ---
 
+# Bootstrap safety: verify python3 is available before anything else.
+# All JSON output in this script uses python3, so if it's missing we must
+# report the error using plain printf (no circular dependency).
+if ! command -v python3 &>/dev/null; then
+    printf '{"error":"python3_not_found","hint":"python3 is required but not installed. Install Python 3: brew install python3 (macOS) or apt install python3 (Linux)","recoverable":false}\n' >&2
+    exit 2
+fi
+
 ensure_status_dir() {
     mkdir -p "$STATUS_DIR"
 }
@@ -76,16 +84,23 @@ else:
 read_login_status() {
     # Returns: logged_in | logged_out | unknown
     # logged_out auto-expires after LOGOUT_EXPIRY_HOURS
-    python3 -c "
-import json, time, sys
+    # Status is per-backend: pass backend name as $1 to match against cached entry
+    local query_backend="${1:-}"
+    _QB="$query_backend" python3 -c "
+import json, time, os
 try:
     data = json.load(open('$STATUS_FILE'))
     status = data.get('status', 'unknown')
     ts = data.get('timestamp', 0)
     age_hours = (time.time() - ts) / 3600
-    backend = data.get('backend', '')
+    cached_backend = data.get('backend', '')
+    query_backend = os.environ.get('_QB', '')
 
-    if status == 'logged_out' and age_hours > $LOGOUT_EXPIRY_HOURS:
+    # If a specific backend is requested and the cache is for a different backend,
+    # the cached status does not apply — return unknown
+    if query_backend and cached_backend and query_backend != cached_backend:
+        print('unknown')
+    elif status == 'logged_out' and age_hours > $LOGOUT_EXPIRY_HOURS:
         # Expired logged_out — user may have re-logged in, be optimistic
         print('unknown')
     else:
@@ -114,6 +129,10 @@ with open('$STATUS_FILE', 'w') as f:
 # --- Commands ---
 
 cmd_check() {
+    # NOTE: This preflight checks MCP server presence in ~/.claude.json (existence)
+    # but cannot live-test browser MCP connectivity. MCP servers are runtime-managed
+    # by Claude Code and inaccessible from shell scripts. The skill compensates with
+    # optimistic dispatch + post-interaction status caching (see write_login_status).
     local login_status
     local backend
     local ready
@@ -122,16 +141,16 @@ cmd_check() {
 
     # Priority 1: claude-in-chrome (user's real Chrome, has login state)
     if has_mcp_server "claude-in-chrome"; then
-        login_status=$(read_login_status)
         backend="chrome"
+        login_status=$(read_login_status "$backend")
         ready=true
         hint="Grok ready via chrome backend"
         exit_code=0
 
     # Priority 2: playwright-grok (dedicated profile with login persistence)
     elif has_mcp_server "playwright-grok"; then
-        login_status=$(read_login_status)
         backend="playwright-grok"
+        login_status=$(read_login_status "$backend")
         ready=true
         hint="Grok ready via playwright-grok backend"
         exit_code=0
@@ -204,15 +223,22 @@ print(json.dumps({'hint': 'playwright-grok already configured. No action needed.
         exit 1
     fi
 
+    # Config safety: backup ~/.claude.json before modifying
+    local backup_path="${CLAUDE_JSON}.backup.$(date +%Y%m%d_%H%M%S)"
+    if ! cp "$CLAUDE_JSON" "$backup_path"; then
+        emit_error "Failed to create backup" "Could not copy ~/.claude.json to $backup_path. Check disk space and permissions." "true"
+        exit 1
+    fi
+
     # Add playwright-grok by cloning playwright config with --user-data-dir
-    python3 -c "
-import json, sys
+    local setup_output
+    if ! setup_output=$(python3 -c "
+import json, sys, copy
 
 config = json.load(open('$CLAUDE_JSON'))
 pw = config['mcpServers']['playwright']
 
 # Deep copy and add --user-data-dir
-import copy
 grok = copy.deepcopy(pw)
 args = grok.get('args', [])
 
@@ -225,17 +251,27 @@ config['mcpServers']['playwright-grok'] = grok
 
 with open('$CLAUDE_JSON', 'w') as f:
     json.dump(config, f, indent=2)
-
-print(json.dumps({
-    'hint': 'Added playwright-grok to ~/.claude.json. Restart Claude Code to activate.',
-    'profile_dir': '$HOME/.playwright-grok-profile'
-}, indent=2))
-" 2>/dev/null
-
-    if [ $? -ne 0 ]; then
-        emit_error "Failed to update ~/.claude.json" "Check file permissions and JSON validity" "true"
+" 2>&1); then
+        emit_error "Failed to update ~/.claude.json" "Backup saved at $backup_path. Restore with: cp $backup_path ~/.claude.json. Detail: $setup_output" "true"
         exit 1
     fi
+
+    # Post-setup verification: re-read the config and confirm playwright-grok exists
+    if ! has_mcp_server "playwright-grok"; then
+        emit_error "Setup verification failed" "playwright-grok was not found in ~/.claude.json after writing. The file may have been modified concurrently or the write failed silently." "true"
+        exit 1
+    fi
+
+    python3 -c "
+import json
+print(json.dumps({
+    'hint': 'Added playwright-grok to ~/.claude.json and verified. Restart Claude Code to activate.',
+    'profile_dir': '$HOME/.playwright-grok-profile',
+    'backup': '$backup_path',
+    'rollback': 'cp $backup_path ~/.claude.json',
+    'verified': True
+}, indent=2))
+"
 }
 
 cmd_reset() {

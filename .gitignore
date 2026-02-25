@@ -1,0 +1,20 @@
+# Environment and credentials
+.env
+.env.*
+.env.local
+
+# Python
+*.pyc
+__pycache__/
+*.pyo
+
+# Caches
+.cache/
+.grok-status.json
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Playwright profile data
+.playwright-grok-profile/

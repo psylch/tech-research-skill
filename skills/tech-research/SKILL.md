@@ -88,11 +88,15 @@ The script outputs preflight JSON: `{"ready": true, "backend": "chrome", "login_
 
 Key fields: `ready` (boolean), `backend` (`chrome`/`playwright-grok`/`playwright`/`none`), `login_status` (`logged_in`/`logged_out`/`unknown`), `hint` (human-readable summary).
 
+**Live validation note:** Preflight checks MCP server presence in `~/.claude.json` (existence check) but cannot live-test browser MCP connectivity from shell — MCP servers are runtime-managed by Claude Code and only accessible during agent execution. The skill compensates with optimistic dispatch: assume the backend works, then update the login status cache based on actual browser interaction results (see Login Status Cache below).
+
 | Exit Code | Meaning | Action |
 |-----------|---------|--------|
 | `0` READY | Backend available | Pass `backend` value to Grok subagent. If `login_status` is `logged_out`, skip Grok and note in report. Otherwise dispatch subagent (optimistic). |
-| `1` NEEDS_SETUP | Has playwright, no playwright-grok | Run `grok_setup.sh setup` to create dedicated instance, then ask user to restart Claude Code. Meanwhile, dispatch with `backend=playwright` if needed. |
+| `1` NEEDS_SETUP | Has playwright, no playwright-grok | **Setup-first gate:** Run `grok_setup.sh setup` immediately (before any research). Setup backs up `~/.claude.json` before modifying it (backup path is in the output JSON). If setup succeeds, inform user they need to restart Claude Code for playwright-grok to activate, then proceed with research using `backend=playwright` as a degraded fallback for this session only. Do NOT start research and discover the setup need mid-way. |
 | `2` NOT_AVAILABLE | No browser MCP at all | Skip Grok source entirely. Note in report. |
+
+**Config safety:** The setup command always creates a timestamped backup of `~/.claude.json` before writing. If the new config causes issues, restore with the rollback command in the setup output (e.g., `cp ~/.claude.json.backup.<timestamp> ~/.claude.json`).
 
 ### Login Status Cache
 
@@ -102,15 +106,34 @@ Login state is cached at `~/.claude/tech-research/.grok-status.json`. Cache sema
 - Success: `bash ${SKILL_PATH}/scripts/grok_setup.sh status logged_in <backend>`
 - "Sign in" page: `bash ${SKILL_PATH}/scripts/grok_setup.sh status logged_out <backend>`
 
+**Cache corruption recovery:** If the status file is corrupted (invalid JSON, permission errors), delete it (`rm ~/.claude/tech-research/.grok-status.json`) and proceed in optimistic mode. See [references/troubleshooting.md](references/troubleshooting.md) for the full decision tree.
+
 ## Workflow
 
 Progress:
-- [ ] Step 1: Analyze — Break question into per-source sub-queries
-- [ ] Step 2: Preflight — Run `grok_setup.sh check`, determine available sources
+- [ ] Step 1: Preflight — Run `grok_setup.sh check`, complete any setup BEFORE research
+- [ ] Step 2: Analyze — Break question into per-source sub-queries
 - [ ] Step 3: Dispatch — Launch subagents in parallel (Light or Heavy mode)
 - [ ] Step 4: Synthesize — Merge findings into unified report
 
-### 1. Analyze the Research Question
+### 1. Preflight Gate (MUST run first)
+
+Run `grok_setup.sh check` **before doing anything else**. This determines which sources are available and whether one-time setup is needed.
+
+```
+Exit code 0 (READY)     → Note the backend and login_status, proceed to Step 2.
+Exit code 1 (NEEDS_SETUP) → Run `grok_setup.sh setup` NOW.
+                            If setup succeeds, tell the user:
+                              "playwright-grok has been configured. Restart Claude Code
+                               to activate it. For this session, Grok will use the
+                               default playwright backend as a fallback."
+                            Then proceed to Step 2 with backend=playwright.
+Exit code 2 (NOT_AVAILABLE) → Grok is unavailable. Proceed to Step 2 without Grok.
+```
+
+**Key principle:** Setup completes before research begins. Never discover setup needs mid-research.
+
+### 2. Analyze the Research Question
 
 Break the user's question into sub-queries for each source:
 
@@ -127,10 +150,6 @@ Not every research task needs all 3 sources. Select sources based on the questio
 | "How does repo X work internally?" | No | Yes | Maybe |
 | "Compare X vs Y performance" | Maybe | Yes (both repos) | Yes |
 | "What's new in framework X?" | Yes | No | Yes |
-
-### 2. Grok Pre-flight
-
-Run `grok_setup.sh check` and determine whether to dispatch a Grok subagent. See [Grok Pre-flight](#grok-pre-flight) above.
 
 ### 3. Dispatch Research Agents
 
