@@ -78,15 +78,21 @@ Grok requires browser automation with login state. Multiple backends are support
 
 ### Grok Pre-flight
 
-Before dispatching a Grok subagent, run the pre-flight check to detect the best available backend:
+Before dispatching a Grok subagent, detect the best available browser backend. There are two paths:
+
+**Path A — claude-in-chrome (runtime detection, no script needed):**
+If `mcp__claude-in-chrome__*` tools are available in your current session, you already have the best backend. The chrome extension is injected at runtime and **never appears in `~/.claude.json`**, so the shell script cannot detect it. Skip the preflight script entirely — set `backend=chrome` and proceed to dispatch.
+
+**Path B — Playwright fallback (script-based detection):**
+If claude-in-chrome is NOT available, run the preflight script to detect playwright backends:
 
 ```bash
 bash ${SKILL_PATH}/scripts/grok_setup.sh check
 ```
 
-The script outputs preflight JSON: `{"ready": true, "backend": "chrome", "login_status": "logged_in", "hint": "..."}`.
+The script outputs preflight JSON: `{"ready": true, "backend": "playwright-grok", "login_status": "logged_in", "hint": "..."}`.
 
-Key fields: `ready` (boolean), `backend` (`chrome`/`playwright-grok`/`playwright`/`none`), `login_status` (`logged_in`/`logged_out`/`unknown`), `hint` (human-readable summary).
+Key fields: `ready` (boolean), `backend` (`playwright-grok`/`playwright`/`none`), `login_status` (`logged_in`/`logged_out`/`unknown`), `hint` (human-readable summary).
 
 **Live validation note:** Preflight checks MCP server presence in `~/.claude.json` (existence check) but cannot live-test browser MCP connectivity from shell — MCP servers are runtime-managed by Claude Code and only accessible during agent execution. The skill compensates with optimistic dispatch: assume the backend works, then update the login status cache based on actual browser interaction results (see Login Status Cache below).
 
@@ -118,7 +124,11 @@ Progress:
 
 ### 1. Preflight Gate (MUST run first)
 
-Run `grok_setup.sh check` **before doing anything else**. This determines which sources are available and whether one-time setup is needed.
+Run preflight **before doing anything else**. This determines which sources are available and whether one-time setup is needed.
+
+1. Check if `mcp__claude-in-chrome__*` tools are available in your session.
+   - **Yes** → `backend=chrome`, skip the script, proceed directly to Step 2.
+   - **No** → Run `bash ${SKILL_PATH}/scripts/grok_setup.sh check` and act on exit code:
 
 ```
 Exit code 0 (READY)     → Note the backend and login_status, proceed to Step 2.

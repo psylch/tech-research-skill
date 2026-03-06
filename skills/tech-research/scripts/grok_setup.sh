@@ -133,14 +133,27 @@ cmd_check() {
     # but cannot live-test browser MCP connectivity. MCP servers are runtime-managed
     # by Claude Code and inaccessible from shell scripts. The skill compensates with
     # optimistic dispatch + post-interaction status caching (see write_login_status).
+    #
+    # claude-in-chrome is injected at runtime by a Chrome extension and never appears
+    # in ~/.claude.json mcpServers. The calling agent can detect it via its available
+    # MCP tools and pass --backend chrome to override auto-detection.
     local login_status
     local backend
     local ready
     local hint
     local exit_code
+    local override_backend="${GROK_BACKEND_OVERRIDE:-}"
+
+    # If caller provided an override (e.g. agent detected claude-in-chrome at runtime)
+    if [ -n "$override_backend" ]; then
+        backend="$override_backend"
+        login_status=$(read_login_status "$backend")
+        ready=true
+        hint="Grok ready via $backend backend (caller override)"
+        exit_code=0
 
     # Priority 1: claude-in-chrome (user's real Chrome, has login state)
-    if has_mcp_server "claude-in-chrome"; then
+    elif has_mcp_server "claude-in-chrome"; then
         backend="chrome"
         login_status=$(read_login_status "$backend")
         ready=true
@@ -297,7 +310,17 @@ cmd_status() {
 # --- Main ---
 
 case "${1:-}" in
-    check|preflight)  cmd_check ;;
+    check|preflight)
+        # Parse optional --backend flag: grok_setup.sh check --backend chrome
+        shift
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --backend) GROK_BACKEND_OVERRIDE="${2:-}"; shift 2 ;;
+                *) shift ;;
+            esac
+        done
+        cmd_check
+        ;;
     setup)  cmd_setup ;;
     reset)  cmd_reset ;;
     status) cmd_status "${2:-}" "${3:-}" ;;
