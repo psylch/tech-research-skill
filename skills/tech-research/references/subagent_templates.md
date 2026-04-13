@@ -1,10 +1,29 @@
-# Subagent Prompt Templates
+# Subagent Prompt Templates — Role Contracts
 
-Complete prompt templates for dispatching research subagents. Copy and customize the `[PLACEHOLDERS]`.
+Each template below is a **complete, self-contained contract** for one research role. If you were dispatched here by tech-research (or are running it inline), read only the section matching your role — you do NOT need to read `SKILL.md`. The orchestrator already ran preflight and chose your parameters.
+
+**For every role:** before calling any tool not already loaded in your session, check the deferred-tool list and load what you need via `ToolSearch select:<tool1>,<tool2>,...`. Required tools per role are listed in each template. Skipping this step will return `InputValidationError` on the first call.
+
+**Browser singleton rule:** only the Grok role may touch a browser. DeepWiki and WebSearch roles MUST NOT load any browser skill or MCP.
+
+---
 
 ## Grok Subagent Template
 
-The Grok subagent receives a `BACKEND` parameter that determines which browser tools to use. Replace `[BACKEND]` with the value from `grok_setup.sh check`.
+**Role contract — self-contained. Do not read SKILL.md.**
+
+**Parameters you will receive from the orchestrator:**
+- `RESEARCH_QUESTION` — the topic to investigate
+- `BACKEND` — one of `better-agent-browser` / `browser-use` / `chrome` / `playwright-grok` / `playwright`
+- `GROK_QUERY` — the pre-crafted X/Twitter-scoped query
+
+**Deferred tools to load first:**
+- `better-agent-browser`/`browser-use`: no MCP tools needed — use bash + the CLI binary. Load the `better-agent-browser` skill for the bash helper scripts.
+- `chrome`: `ToolSearch select:mcp__claude-in-chrome__navigate,mcp__claude-in-chrome__read_page,mcp__claude-in-chrome__form_input,mcp__claude-in-chrome__computer`
+- `playwright-grok`: `ToolSearch select:mcp__playwright-grok__browser_navigate,mcp__playwright-grok__browser_snapshot,mcp__playwright-grok__browser_fill_form,mcp__playwright-grok__browser_evaluate,mcp__playwright-grok__browser_click`
+- `playwright`: same as above but `mcp__playwright__*`
+
+**Full instructions (use this as your prompt body):**
 
 ```
 Research a technical topic using Grok (grok.com) via browser automation.
@@ -125,7 +144,23 @@ The Grok query to use:
 - [What Grok couldn't find]
 ```
 
+---
+
 ## DeepWiki Subagent Template
+
+**Role contract — self-contained. Do not read SKILL.md. Do NOT load any browser skill or browser MCP.**
+
+**Parameters you will receive from the orchestrator:**
+- `RESEARCH_QUESTION` — the topic to investigate
+- `REPO_LIST` — one or more `owner/repo` strings
+- `CUSTOM_QUESTIONS` — optional topic-specific questions
+
+**Deferred tools to load first:**
+```
+ToolSearch select:mcp__deepwiki__ask_question
+```
+
+**Full instructions (use this as your prompt body):**
 
 ```
 Research GitHub repositories using the DeepWiki MCP tools.
@@ -137,7 +172,7 @@ Research GitHub repositories using the DeepWiki MCP tools.
 [REPO_LIST — e.g., "pmndrs/zustand", "pmndrs/jotai"]
 
 ## Step 1: Ask Targeted Questions
-For each repository, use ToolSearch to load deepwiki tools (query: "+deepwiki"), then call mcp__deepwiki__ask_question directly with questions like:
+Call mcp__deepwiki__ask_question directly with questions like:
 
 **IMPORTANT: Do NOT use `read_wiki_structure` or `read_wiki_contents`. Always use `ask_question` directly — it provides faster, more focused answers without needing to browse the wiki structure first.**
 
@@ -171,7 +206,23 @@ Return findings in this format:
 | [aspect] | [finding] | [finding] |
 ```
 
+---
+
 ## WebSearch Subagent Template
+
+**Role contract — self-contained. Do not read SKILL.md. Do NOT load any browser skill or browser MCP.**
+
+**Parameters you will receive from the orchestrator:**
+- `RESEARCH_QUESTION` — the topic to investigate
+- `TOPIC` — keyword form for search queries
+- `CURRENT_YEAR` — for recency-scoped searches
+
+**Deferred tools to load first:**
+```
+ToolSearch select:WebSearch,WebFetch
+```
+
+**Full instructions (use this as your prompt body):**
 
 ```
 Research a technical topic using web search.

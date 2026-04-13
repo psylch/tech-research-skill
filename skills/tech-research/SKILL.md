@@ -132,12 +132,30 @@ Login state is cached at `~/.claude/tech-research/.grok-status.json`. Cache sema
 
 **Cache corruption recovery:** If the status file is corrupted (invalid JSON, permission errors), delete it (`rm ~/.claude/tech-research/.grok-status.json`) and proceed in optimistic mode. See [references/troubleshooting.md](references/troubleshooting.md) for the full decision tree.
 
+## Execution Context: Top-Level vs Subagent
+
+This skill is a two-layer contract:
+
+- **SKILL.md (this file)** — orchestrator's manual. Covers preflight, mode selection, dispatch, and synthesis. This is what the agent running tech-research directly should read.
+- **`references/subagent_templates.md`** — per-role contracts (Grok / DeepWiki / WebSearch). Each template is **complete and self-contained** — a dispatched role-agent does NOT need to read SKILL.md. The orchestrator points the role-agent to the right section by path and passes minimal parameters.
+
+Before starting, determine how this skill was invoked:
+
+| Context | `Task` tool available? | Mode |
+|---------|----------------------|------|
+| **Top-level agent** (user invoked tech-research directly) | Yes | **Light / Heavy Mode.** Dispatch role-agents via `Task`, each pointed at `references/subagent_templates.md §<role>`. |
+| **Inside an existing subagent** (another skill or agent dispatched you) | No — subagents cannot spawn further subagents | **Inline Mode.** Read `references/subagent_templates.md` yourself and execute each role's contract directly in your own tool loop. Skip all `Task` / `TeamCreate` calls. |
+
+**How to detect:** if `Task` is not in your available tools (or `ToolSearch select:Task` returns no match), you're in Inline Mode.
+
+Either way, the per-role behavior (login check, query rules, report format, deferred-tool loading) lives in the template file, not here. Both modes converge on the same reference contract.
+
 ## Workflow
 
 Progress:
 - [ ] Step 1: Preflight — Run `grok_setup.sh check`, complete any setup BEFORE research
 - [ ] Step 2: Analyze — Break question into per-source sub-queries
-- [ ] Step 3: Dispatch — Launch subagents in parallel (Light or Heavy mode)
+- [ ] Step 3: Dispatch — Launch subagents (Light/Heavy Mode) OR run inline (Inline Mode)
 - [ ] Step 4: Synthesize — Merge findings into unified report
 
 ### 1. Preflight Gate (MUST run first)
@@ -149,7 +167,7 @@ Walk priorities top-down; stop on first match.
 1. `command -v agent-browser` succeeds → `backend=better-agent-browser`. **Stop, go to Step 2 of workflow.**
 2. Otherwise, `command -v browser-use` succeeds → `backend=browser-use`. **Stop, go to Step 2 of workflow.**
 3. Otherwise, `mcp__claude-in-chrome__*` tools visible in session → `backend=chrome`. **Stop, go to Step 2 of workflow.**
-4. Otherwise, run `bash ${SKILL_PATH}/scripts/grok_setup.sh check` and act on exit code:
+4. Otherwise (priorities 0–3 all missed), run `bash ${SKILL_PATH}/scripts/grok_setup.sh check` to probe for playwright MCP backends. **Only reach this branch if none of the above matched** — if you matched priority 0/1/2, you already stopped.
 
 ```
 Exit code 0 (READY)     → Note the backend and login_status, proceed to Step 2.
@@ -184,30 +202,84 @@ Not every research task needs all 3 sources. Select sources based on the questio
 
 ### 3. Dispatch Research Agents
 
-Choose the dispatch method based on the research mode selected above.
+Choose the dispatch method based on the research mode and execution context.
 
-#### Light Mode: Task Subagents
+**Browser is a singleton — enforce it in the prompts.** Only the Grok role touches a browser. The DeepWiki and WebSearch role prompts MUST forbid loading any browser skill (better-agent-browser, playwright, claude-in-chrome) — they are restricted to DeepWiki MCP, WebSearch, and WebFetch only. Otherwise parallel roles race for the same Chrome `user-data-dir` / CDP port and collide.
 
-**Browser is a singleton — enforce it in the prompts.** Only the Grok subagent may touch a browser. The DeepWiki and WebSearch subagent prompts MUST explicitly forbid loading any browser skill (better-agent-browser, playwright, claude-in-chrome) — they should be restricted to DeepWiki MCP, WebSearch, and WebFetch only. Otherwise multiple subagents will race for the same Chrome `user-data-dir` / CDP port and collide immediately.
+If you genuinely need multiple parallel browser roles (rare), switch to Heavy Mode and coordinate all of them through one shared Layer-2 CDP proxy — see `better-agent-browser` Layer 2.
 
-If you genuinely need multiple parallel browser subagents (rare for tech-research), switch to Heavy Mode and coordinate all of them through one shared Layer-2 CDP proxy — see `better-agent-browser` Layer 2.
+#### Light Mode: Task Subagents (top-level only)
 
-Launch subagents concurrently using `Task`. See [references/subagent_templates.md](references/subagent_templates.md) for complete prompt templates.
+Each role-agent is pointed at its contract by path. Do NOT inline the template body into the Task prompt — the subagent reads the file directly. This keeps the dispatch prompt small and guarantees the subagent sees the canonical, up-to-date contract.
 
-**Grok subagent:**
+**Grok role:**
 ```
-Task(subagent_type: "general-purpose", description: "Ask Grok about [topic]", prompt: <grok_template with BACKEND>)
+Task(
+  subagent_type: "general-purpose",
+  description: "Grok research [topic]",
+  prompt: """
+  Read ${SKILL_PATH}/references/subagent_templates.md § Grok Subagent Template.
+  That file is your complete contract — do NOT read SKILL.md.
+
+  Parameters:
+  - RESEARCH_QUESTION: [question]
+  - BACKEND: [backend from preflight]
+  - GROK_QUERY: [X/Twitter-scoped query per the template's rules]
+
+  Execute literally and return findings in the format the template specifies.
+  """
+)
 ```
 
-**DeepWiki subagent:**
+**DeepWiki role:**
 ```
-Task(subagent_type: "general-purpose", description: "DeepWiki research [repo]", prompt: <deepwiki_template>)
+Task(
+  subagent_type: "general-purpose",
+  description: "DeepWiki research [repo]",
+  prompt: """
+  Read ${SKILL_PATH}/references/subagent_templates.md § DeepWiki Subagent Template.
+  That file is your complete contract — do NOT read SKILL.md.
+  Do NOT load any browser skill.
+
+  Parameters:
+  - RESEARCH_QUESTION: [question]
+  - REPO_LIST: [owner/repo, ...]
+  - CUSTOM_QUESTIONS: [topic-specific questions]
+
+  Execute literally and return findings in the format the template specifies.
+  """
+)
 ```
 
-**WebSearch subagent:**
+**WebSearch role:**
 ```
-Task(subagent_type: "general-purpose", description: "Web research [topic]", prompt: <websearch_template>)
+Task(
+  subagent_type: "general-purpose",
+  description: "Web research [topic]",
+  prompt: """
+  Read ${SKILL_PATH}/references/subagent_templates.md § WebSearch Subagent Template.
+  That file is your complete contract — do NOT read SKILL.md.
+  Do NOT load any browser skill.
+
+  Parameters:
+  - RESEARCH_QUESTION: [question]
+  - TOPIC: [topic keywords]
+  - CURRENT_YEAR: [year]
+
+  Execute literally and return findings in the format the template specifies.
+  """
+)
 ```
+
+#### Inline Mode (running inside an existing subagent)
+
+You cannot spawn further subagents. Instead, read `references/subagent_templates.md` yourself and execute each role's contract in your own tool loop:
+
+1. Read the template file once.
+2. For each role you need, treat the template section as your instructions and execute inline.
+3. Run WebSearch + DeepWiki in parallel tool calls. Run Grok separately (it holds the browser singleton).
+4. Honor the browser-singleton rule: don't try to run multiple browser-using steps concurrently.
+5. Collect all three role reports mentally, then proceed to Step 4 (Synthesize) as usual.
 
 #### Heavy Mode: Agent Teammates
 
