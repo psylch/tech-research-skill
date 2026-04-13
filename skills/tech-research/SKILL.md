@@ -68,23 +68,29 @@ Not every source will be available every time. Follow this degradation strategy:
 
 Grok requires browser automation with login state. Multiple backends are supported, detected in priority order:
 
-| Priority | Backend | MCP Server Name | Pros | Cons |
-|----------|---------|----------------|------|------|
-| 1 | **Claude-in-Chrome** | `claude-in-chrome` | Zero setup, uses user's Chrome login state | Occupies user's visible Chrome window |
-| 2 | **Playwright-Grok** | `playwright-grok` | Dedicated profile, login persists, doesn't block default Playwright | One-time setup required |
-| 3 | **Playwright** (default) | `playwright` | Already configured for most users | No login persistence, may not be logged in |
+| Priority | Backend | Detection | Pros | Cons |
+|----------|---------|-----------|------|------|
+| 0 | **better-agent-browser** | Global rule in `~/.claude/CLAUDE.md`, or skill installed globally | Headless by default, persistent dedicated profile, lock-based parallel safety | One-time Chrome setup on port 9333 |
+| 1 | **Claude-in-Chrome** | `mcp__claude-in-chrome__*` tools visible at runtime | Zero setup, uses user's Chrome login state | Occupies user's visible Chrome window |
+| 2 | **Playwright-Grok** | `playwright-grok` MCP in `~/.claude.json` | Dedicated profile, login persists, doesn't block default Playwright | One-time setup required |
+| 3 | **Playwright** (default) | `playwright` MCP in `~/.claude.json` | Already configured for most users | No login persistence, may not be logged in |
+
+**Priority-0 gate (global rule):** If `~/.claude/CLAUDE.md` mandates `better-agent-browser` for browser tasks — or bans `claude-in-chrome`/`playwright`/`playwright-grok` — use **better-agent-browser only** and skip all MCP-based fallbacks. Do not run `grok_setup.sh check` (it targets playwright backends and will report NOT_AVAILABLE). Instead, set `backend=better-agent-browser` and dispatch the Grok subagent with the matching template branch.
 
 **IMPORTANT**: Do NOT modify the user's default `playwright` MCP to add `--user-data-dir`. This would force ALL browser operations through a single profile, breaking parallel agent usage. Instead, use a separate `playwright-grok` instance.
 
 ### Grok Pre-flight
 
-Before dispatching a Grok subagent, detect the best available browser backend. There are two paths:
+Before dispatching a Grok subagent, detect the best available browser backend. There are three paths, checked in order:
 
-**Path A — claude-in-chrome (runtime detection, no script needed):**
-If `mcp__claude-in-chrome__*` tools are available in your current session, you already have the best backend. The chrome extension is injected at runtime and **never appears in `~/.claude.json`**, so the shell script cannot detect it. Skip the preflight script entirely — set `backend=chrome` and proceed to dispatch.
+**Path A — better-agent-browser (global-rule detection, no script needed):**
+Check `~/.claude/CLAUDE.md` for a directive that mandates `better-agent-browser` or bans MCP browser servers (keywords: "better-agent-browser" + "必须"/"must"/"only"/"禁用"/"ban"/"do not use"). If present, set `backend=better-agent-browser` and skip the script entirely. Do NOT fall through to MCP backends. The Grok subagent will load the `better-agent-browser` skill and follow its Layer 0b recipe (headless, dedicated `~/.chrome-debug-profile` on port 9333).
 
-**Path B — Playwright fallback (script-based detection):**
-If claude-in-chrome is NOT available, run the preflight script to detect playwright backends:
+**Path B — claude-in-chrome (runtime detection, no script needed):**
+If `mcp__claude-in-chrome__*` tools are available in your current session, you already have this backend. The chrome extension is injected at runtime and **never appears in `~/.claude.json`**, so the shell script cannot detect it. Skip the preflight script entirely — set `backend=chrome` and proceed to dispatch.
+
+**Path C — Playwright fallback (script-based detection):**
+If neither A nor B applies, run the preflight script to detect playwright backends:
 
 ```bash
 bash ${SKILL_PATH}/scripts/grok_setup.sh check
@@ -126,7 +132,10 @@ Progress:
 
 Run preflight **before doing anything else**. This determines which sources are available and whether one-time setup is needed.
 
-1. Check if `mcp__claude-in-chrome__*` tools are available in your session.
+1. Check `~/.claude/CLAUDE.md` for a global rule mandating `better-agent-browser` (or banning MCP browser servers).
+   - **Matched** → `backend=better-agent-browser`, skip the script, proceed directly to Step 2. Do not fall through.
+   - **Not matched** → go to step 2.
+2. Check if `mcp__claude-in-chrome__*` tools are available in your session.
    - **Yes** → `backend=chrome`, skip the script, proceed directly to Step 2.
    - **No** → Run `bash ${SKILL_PATH}/scripts/grok_setup.sh check` and act on exit code:
 
@@ -166,6 +175,10 @@ Not every research task needs all 3 sources. Select sources based on the questio
 Choose the dispatch method based on the research mode selected above.
 
 #### Light Mode: Task Subagents
+
+**Browser is a singleton — enforce it in the prompts.** Only the Grok subagent may touch a browser. The DeepWiki and WebSearch subagent prompts MUST explicitly forbid loading any browser skill (better-agent-browser, playwright, claude-in-chrome) — they should be restricted to DeepWiki MCP, WebSearch, and WebFetch only. Otherwise multiple subagents will race for the same Chrome `user-data-dir` / CDP port and collide immediately.
+
+If you genuinely need multiple parallel browser subagents (rare for tech-research), switch to Heavy Mode and coordinate all of them through one shared Layer-2 CDP proxy — see `better-agent-browser` Layer 2.
 
 Launch subagents concurrently using `Task`. See [references/subagent_templates.md](references/subagent_templates.md) for complete prompt templates.
 

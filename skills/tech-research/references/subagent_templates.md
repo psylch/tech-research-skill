@@ -16,6 +16,15 @@ Research a technical topic using Grok (grok.com) via browser automation.
 
 Use the following tools based on your assigned backend:
 
+### If BACKEND=better-agent-browser
+1. Load the `better-agent-browser` skill. Read its SKILL.md "Hard Rules" and Layer 0b sections in full before acting.
+2. **Default to HEADLESS Chrome.** If Chrome is not already running on port 9333 with `~/.chrome-debug-profile`, follow the Layer 0b "First-time Chrome setup" recipe — it uses `--headless=new --disable-gpu`.
+3. **NEVER use `open -a "Google Chrome"`** on macOS. Launch the binary directly per the skill.
+4. Connect via `bash ${SKILL_PATH_BAB}/scripts/browser-connect.sh 9333` (where `SKILL_PATH_BAB` is the better-agent-browser skill path). If the returned `mode=layer2`, another agent holds the lock — switch to the CDP proxy per Layer 2, or abort and ask the orchestrator to serialize.
+5. Use `agent-browser tab new https://grok.com` for each query (one query per tab).
+6. Use `agent-browser snapshot -i` to inspect state; `agent-browser click @eN` / `agent-browser fill @eN "text"` to interact.
+7. When done, `agent-browser tab close` then `bash ${SKILL_PATH_BAB}/scripts/browser-disconnect.sh 9333` to release the lock.
+
 ### If BACKEND=chrome (Claude-in-Chrome)
 1. Use ToolSearch("+claude-in-chrome") to load browser tools
 2. Use mcp__claude-in-chrome__navigate to open https://grok.com
@@ -37,19 +46,24 @@ Use the following tools based on your assigned backend:
 4. Use mcp__playwright__browser_fill_form or mcp__playwright__browser_evaluate to type queries
 5. Use mcp__playwright__browser_click to click buttons
 
-## Step 1: Open Grok and Check Login
+## Step 0: Verify login state BEFORE any query work
+
+**Abort early if logged out — do NOT spend minutes mining only to discover logout at the end.**
+
+1. Load browser tools for your backend (see "Browser Backend" section above).
+2. Navigate to https://grok.com (or https://x.com/home if grok.com doesn't show a login wall clearly).
+3. Read the page state (snapshot / read_page / `agent-browser snapshot -i`).
+4. Classify:
+   - **Login wall visible** (any of: "Sign in" / "Log in" / "Create account" / "Enter your password" / redirect to x.com/login):
+     - If `BACKEND != better-agent-browser`: run `bash ${SKILL_PATH}/scripts/grok_setup.sh status logged_out [BACKEND]`
+     - Write one line to your final output: `"GROK_SKIPPED: not logged in on [BACKEND]. User should log into grok.com in the [browser description] profile, then re-run tech-research."`
+     - **ABORT.** Do NOT attempt to log in yourself. Do NOT proceed to Step 1.
+   - **Chat interface visible** → logged in, proceed to Step 1.
+5. If you cannot classify confidently after one snapshot, take a screenshot, report "GROK_SKIPPED: login state unknown, see screenshot", and abort.
+
+## Step 1: Query Grok
 
 **IMPORTANT: Always start a NEW tab/page for each Grok query. Do NOT ask multiple questions in the same Grok session** — follow-up questions in the same chat degrade answer quality and may hit rate limits. One query per page, then close/leave it.
-
-1. Load browser tools using ToolSearch as described above for your backend
-2. Navigate to https://grok.com
-3. Check the page state (snapshot/read_page):
-   - If "Sign in" link/button is visible → NOT logged in:
-     - Run: bash ${SKILL_PATH}/scripts/grok_setup.sh status logged_out [BACKEND]
-     - Return: "GROK_SKIPPED: Not logged in. User should log into grok.com in [browser description], then run `grok_setup.sh reset`."
-   - If chat interface is visible → logged in, proceed to Step 2
-
-## Step 2: Query Grok
 
 1. Select "Fast" model if a model selector is available
 2. Fill the chat input with your query (see query crafting rules below)
@@ -81,10 +95,10 @@ The Grok query to use:
 [GROK_QUERY — MUST contain X/Twitter-scoping keywords per rules above]
 ---
 
-## Step 3: Report
+## Step 2: Report
 
 1. For 2-3 X post URLs in the response, navigate to verify they exist and content matches
-2. Update login status:
+2. Update login status (skip if `BACKEND=better-agent-browser` — that backend manages its own profile state):
    ```bash
    bash ${SKILL_PATH}/scripts/grok_setup.sh status logged_in [BACKEND]
    ```
