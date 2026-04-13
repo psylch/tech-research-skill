@@ -70,32 +70,39 @@ Grok requires browser automation with login state. Multiple backends are support
 
 | Priority | Backend | Detection | Pros | Cons |
 |----------|---------|-----------|------|------|
-| 0 | **CLI (agent-browser / browser-use)** | `command -v agent-browser` or `command -v browser-use` succeeds | Headless by default, persistent dedicated profile, lock-based parallel safety, no MCP dependency | One-time Chrome setup on port 9333 |
-| 1 | **Claude-in-Chrome** | `mcp__claude-in-chrome__*` tools visible at runtime | Zero setup, uses user's Chrome login state | Occupies user's visible Chrome window |
-| 2 | **Playwright-Grok** | `playwright-grok` MCP in `~/.claude.json` | Dedicated profile, login persists, doesn't block default Playwright | One-time setup required |
-| 3 | **Playwright** (default) | `playwright` MCP in `~/.claude.json` | Already configured for most users | No login persistence, may not be logged in |
+| 0 | **better-agent-browser** (agent-browser CLI) | `command -v agent-browser` succeeds | Headless by default, persistent `~/.chrome-debug-profile`, lock-based parallel safety, no MCP dependency | One-time Chrome setup on port 9333 |
+| 1 | **browser-use** (browser-use CLI) | `command -v browser-use` succeeds AND priority 0 failed | Alternate CLI driver, LLM-guided element selection | Distinct tool, less integrated with this skill's recipes |
+| 2 | **Claude-in-Chrome** | `mcp__claude-in-chrome__*` tools visible at runtime AND priorities 0–1 failed | Zero setup, uses user's Chrome login state | Occupies user's visible Chrome window |
+| 3 | **Playwright-Grok** | `playwright-grok` MCP in `~/.claude.json` AND priorities 0–2 failed | Dedicated profile, login persists, doesn't block default Playwright | One-time setup required |
+| 4 | **Playwright** (default) | `playwright` MCP in `~/.claude.json` AND priorities 0–3 failed | Already configured for most users | No login persistence, may not be logged in |
 
-**Priority-0 gate (CLI capability):** If `agent-browser` is on `PATH`, set `backend=better-agent-browser` and dispatch via the `better-agent-browser` skill (it wraps the `agent-browser` CLI). If only `browser-use` is available, set `backend=browser-use` and dispatch via that CLI instead. Either way, skip `grok_setup.sh check` — it targets playwright MCP backends and will report NOT_AVAILABLE when none are configured. CLI-backed paths do NOT depend on `~/.claude.json`.
+**Detection is strict first-match, top-down.** As soon as a priority's detector returns true, set `backend` to that row and stop. Do NOT check lower priorities. CLI backends (0 and 1) skip `grok_setup.sh check` entirely — it only tracks MCP config state, not CLI presence.
 
 **IMPORTANT**: Do NOT modify the user's default `playwright` MCP to add `--user-data-dir`. This would force ALL browser operations through a single profile, breaking parallel agent usage. Instead, use a separate `playwright-grok` instance.
 
 ### Grok Pre-flight
 
-Before dispatching a Grok subagent, detect the best available browser backend. There are three paths, checked in order:
+Before dispatching a Grok subagent, walk the priority table top-down. Run each detector; on first match, set `backend` and **stop**. Paths are mutually exclusive — never evaluate a lower priority after a higher one has matched.
 
-**Path A — CLI capability (agent-browser / browser-use):**
-Run `command -v agent-browser` and `command -v browser-use`. If either succeeds, dispatch via that CLI and skip all MCP-based fallbacks.
+**Priority 0 — better-agent-browser (CLI):**
+```bash
+command -v agent-browser >/dev/null && echo "MATCH: backend=better-agent-browser"
+```
+If matched: set `backend=better-agent-browser`. The Grok subagent loads the `better-agent-browser` skill and follows its Layer 0b recipe (headless, dedicated `~/.chrome-debug-profile` on port 9333). **Stop. Do not check lower priorities.**
 
-- `agent-browser` present → `backend=better-agent-browser`. The Grok subagent loads the `better-agent-browser` skill and follows its Layer 0b recipe (headless, dedicated `~/.chrome-debug-profile` on port 9333).
-- else `browser-use` present → `backend=browser-use`. The Grok subagent drives `browser-use` directly per its own docs.
+**Priority 1 — browser-use (CLI):**
+```bash
+command -v browser-use >/dev/null && echo "MATCH: backend=browser-use"
+```
+Only evaluated if priority 0 did NOT match. If matched: set `backend=browser-use`. The Grok subagent drives `browser-use` directly per its own docs. **Stop.**
 
-CLI-backed paths do NOT depend on `~/.claude.json` or MCP runtime availability. Do NOT run `grok_setup.sh check` on this path.
+Priorities 0 and 1 do NOT depend on `~/.claude.json` or MCP runtime availability. Do NOT run `grok_setup.sh check` on these paths.
 
-**Path B — claude-in-chrome (runtime detection, no script needed):**
-If `mcp__claude-in-chrome__*` tools are available in your current session, you already have this backend. The chrome extension is injected at runtime and **never appears in `~/.claude.json`**, so the shell script cannot detect it. Skip the preflight script entirely — set `backend=chrome` and proceed to dispatch.
+**Priority 2 — claude-in-chrome (runtime MCP):**
+Only evaluated if priorities 0 and 1 did NOT match. Check whether `mcp__claude-in-chrome__*` tools are visible in your current session. If yes: set `backend=chrome`. The chrome extension is injected at runtime and **never appears in `~/.claude.json`**, so the shell script cannot detect it. Skip the preflight script entirely. **Stop.**
 
-**Path C — Playwright fallback (script-based detection):**
-If neither A nor B applies, run the preflight script to detect playwright backends:
+**Priority 3–4 — Playwright fallback (script-based detection):**
+Only evaluated if priorities 0–2 did NOT match. Run the preflight script to detect playwright backends:
 
 ```bash
 bash ${SKILL_PATH}/scripts/grok_setup.sh check
@@ -137,13 +144,12 @@ Progress:
 
 Run preflight **before doing anything else**. This determines which sources are available and whether one-time setup is needed.
 
-1. Capability check: `command -v agent-browser || command -v browser-use`.
-   - **`agent-browser` found** → `backend=better-agent-browser`, skip the script, proceed directly to Step 2.
-   - **`browser-use` found** → `backend=browser-use`, skip the script, proceed directly to Step 2.
-   - **Neither** → go to step 2.
-2. Check if `mcp__claude-in-chrome__*` tools are available in your session.
-   - **Yes** → `backend=chrome`, skip the script, proceed directly to Step 2.
-   - **No** → Run `bash ${SKILL_PATH}/scripts/grok_setup.sh check` and act on exit code:
+Walk priorities top-down; stop on first match.
+
+1. `command -v agent-browser` succeeds → `backend=better-agent-browser`. **Stop, go to Step 2 of workflow.**
+2. Otherwise, `command -v browser-use` succeeds → `backend=browser-use`. **Stop, go to Step 2 of workflow.**
+3. Otherwise, `mcp__claude-in-chrome__*` tools visible in session → `backend=chrome`. **Stop, go to Step 2 of workflow.**
+4. Otherwise, run `bash ${SKILL_PATH}/scripts/grok_setup.sh check` and act on exit code:
 
 ```
 Exit code 0 (READY)     → Note the backend and login_status, proceed to Step 2.
