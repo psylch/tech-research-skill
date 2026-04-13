@@ -16,7 +16,8 @@ Research a technical topic using Grok (grok.com) via browser automation.
 
 Use the following tools based on your assigned backend:
 
-### If BACKEND=better-agent-browser
+### If BACKEND=better-agent-browser (agent-browser CLI)
+Capability verified by main agent via `command -v agent-browser`.
 1. Load the `better-agent-browser` skill. Read its SKILL.md "Hard Rules" and Layer 0b sections in full before acting.
 2. **Default to HEADLESS Chrome.** If Chrome is not already running on port 9333 with `~/.chrome-debug-profile`, follow the Layer 0b "First-time Chrome setup" recipe — it uses `--headless=new --disable-gpu`.
 3. **NEVER use `open -a "Google Chrome"`** on macOS. Launch the binary directly per the skill.
@@ -24,6 +25,13 @@ Use the following tools based on your assigned backend:
 5. Use `agent-browser tab new https://grok.com` for each query (one query per tab).
 6. Use `agent-browser snapshot -i` to inspect state; `agent-browser click @eN` / `agent-browser fill @eN "text"` to interact.
 7. When done, `agent-browser tab close` then `bash ${SKILL_PATH_BAB}/scripts/browser-disconnect.sh 9333` to release the lock.
+
+### If BACKEND=browser-use (browser-use CLI)
+Capability verified by main agent via `command -v browser-use`.
+1. Drive the `browser-use` CLI directly per its own docs — this skill does not wrap it.
+2. **Default to headless.** Consult `browser-use --help` for the headless flag (typically `--headless` or via its config file). Do not launch a visible browser unless the task requires interactive login.
+3. Open https://grok.com, check login state (see Step 0), run the query, capture the response.
+4. Respect the singleton rule — do not start multiple browser-use instances racing over the same profile.
 
 ### If BACKEND=chrome (Claude-in-Chrome)
 1. Use ToolSearch("+claude-in-chrome") to load browser tools
@@ -55,7 +63,7 @@ Use the following tools based on your assigned backend:
 3. Read the page state (snapshot / read_page / `agent-browser snapshot -i`).
 4. Classify:
    - **Login wall visible** (any of: "Sign in" / "Log in" / "Create account" / "Enter your password" / redirect to x.com/login):
-     - If `BACKEND != better-agent-browser`: run `bash ${SKILL_PATH}/scripts/grok_setup.sh status logged_out [BACKEND]`
+     - If `BACKEND` is an MCP backend (`chrome` / `playwright-grok` / `playwright`): run `bash ${SKILL_PATH}/scripts/grok_setup.sh status logged_out [BACKEND]`. Skip for CLI backends (`better-agent-browser` / `browser-use`) — `grok_setup.sh` tracks only MCP state.
      - Write one line to your final output: `"GROK_SKIPPED: not logged in on [BACKEND]. User should log into grok.com in the [browser description] profile, then re-run tech-research."`
      - **ABORT.** Do NOT attempt to log in yourself. Do NOT proceed to Step 1.
    - **Chat interface visible** → logged in, proceed to Step 1.
@@ -98,7 +106,7 @@ The Grok query to use:
 ## Step 2: Report
 
 1. For 2-3 X post URLs in the response, navigate to verify they exist and content matches
-2. Update login status (skip if `BACKEND=better-agent-browser` — that backend manages its own profile state):
+2. Update login status (MCP backends only — skip for `better-agent-browser` and `browser-use`, their profiles persist on disk):
    ```bash
    bash ${SKILL_PATH}/scripts/grok_setup.sh status logged_in [BACKEND]
    ```
