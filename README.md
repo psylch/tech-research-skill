@@ -2,10 +2,11 @@
 
 [中文文档](README.zh.md)
 
-A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skill for multi-source technical research. Gathers intelligence from three sources and synthesizes findings into a unified report — using lightweight subagents for simple queries or coordinated agent teammates for heavy competitive research.
+A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skill for multi-source technical research. Gathers intelligence from complementary sources and synthesizes findings into a unified report — using lightweight subagents for simple queries or coordinated agent teammates for heavy competitive research.
 
 | Source | Tool | What It Provides |
 |--------|------|------------------|
+| **Xquik** | `xquik_source.py` + Hermes Tweet/Xquik key | Structured X post search and trends without browser state |
 | **Grok** | Browser automation → grok.com | X (Twitter) developer discussions, sentiment, expert discovery |
 | **DeepWiki** | DeepWiki MCP → `ask_question` | AI-powered GitHub repository analysis, architecture, API docs |
 | **WebSearch** | Built-in web search | Official docs, benchmarks, blog posts, recent announcements |
@@ -33,7 +34,24 @@ Restart Claude Code after installation.
 - **Browser automation** for Grok (optional — Grok source is skipped if unavailable):
   - **Claude-in-Chrome** (zero setup, recommended), or
   - **Playwright MCP** (auto-setup via `grok_setup.sh`)
+- **Hermes Tweet / Xquik key** for structured X evidence (optional):
+  - `XQUIK_API_KEY` or `HERMES_TWEET_API_KEY`
+  - skipped automatically when neither variable is set
 - **DeepWiki MCP** for GitHub repository analysis (optional)
+
+### Optional Xquik Source
+
+When a Hermes Tweet/Xquik key is configured, the skill can collect structured
+read-only X evidence without opening a browser:
+
+```bash
+python ~/.agents/skills/tech-research/scripts/xquik_source.py search "Claude Code workflows" --limit 8
+python ~/.agents/skills/tech-research/scripts/xquik_source.py trends --woeid 1 --limit 10
+```
+
+Use this source for quick tweet evidence, trend hints, and fallback coverage
+when Grok browser access is unavailable. Grok remains useful for richer
+summaries and expert discovery.
 
 ### Grok Browser Backend
 
@@ -97,19 +115,19 @@ evaluate framework: SolidJS
 
 | Signal | Mode |
 |--------|------|
-| Single topic, multiple data sources | **Light** — up to 3 parallel Task Subagents, each handling one data source |
+| Single topic, multiple data sources | **Light** — up to 4 parallel Task Subagents, each handling one data source |
 | Multiple topics/competitors needing cross-comparison | **Heavy** — Agent Teammates that can communicate, share discoveries, and avoid duplication |
 | Research may require dynamic re-scoping | **Heavy** |
 | Agent count ≥ 4 | **Heavy** |
 
-Not every research task uses all 3 sources. The skill selects sources based on the question type:
+Not every research task uses every source. The skill selects sources based on the question type:
 
-| Research Type | Grok | DeepWiki | WebSearch |
-|---------------|------|----------|-----------|
-| "Should we use library X?" | Yes | Yes | Yes |
-| "What are devs saying about X?" | Yes | No | Maybe |
-| "How does repo X work internally?" | No | Yes | Maybe |
-| "Compare X vs Y performance" | Maybe | Yes (both) | Yes |
+| Research Type | Xquik | Grok | DeepWiki | WebSearch |
+|---------------|-------|------|----------|-----------|
+| "Should we use library X?" | Maybe | Yes | Yes | Yes |
+| "What are devs saying about X?" | Yes | Yes | No | Maybe |
+| "How does repo X work internally?" | No | No | Yes | Maybe |
+| "Compare X vs Y performance" | Maybe | Maybe | Yes (both) | Yes |
 
 ## Key Design Decisions
 
@@ -142,7 +160,8 @@ tech-research-skill/
 │       │   ├── subagent_templates.md # Prompt templates for each subagent
 │       │   └── query_strategies.md   # Grok query crafting strategies
 │       └── scripts/
-│           └── grok_setup.sh        # Backend detection, setup, and login status management
+│           ├── grok_setup.sh         # Backend detection, setup, and login status management
+│           └── xquik_source.py       # Optional structured X evidence source
 ├── README.md
 ├── README.zh.md
 └── LICENSE

@@ -2,10 +2,11 @@
 
 [English](README.md)
 
-一个 [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skill，用于多源技术调研。从三个数据源采集情报并合成为统一报告——简单查询用轻量子 agent（Task Subagent），重度竞品调研用可互相协作的 Agent Teammate。
+一个 [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skill，用于多源技术调研。从互补数据源采集情报并合成为统一报告——简单查询用轻量子 agent（Task Subagent），重度竞品调研用可互相协作的 Agent Teammate。
 
 | 数据源 | 工具 | 提供什么 |
 |--------|------|----------|
+| **Xquik** | `xquik_source.py` + Hermes Tweet/Xquik key | 无需浏览器登录态的结构化 X 推文搜索与趋势 |
 | **Grok** | 浏览器自动化 → grok.com | X (Twitter) 开发者讨论、社区情感、专家发现 |
 | **DeepWiki** | DeepWiki MCP → `ask_question` | AI 驱动的 GitHub 仓库分析、架构、API 文档 |
 | **WebSearch** | 内置搜索 | 官方文档、基准测试、博客文章、近期公告 |
@@ -33,7 +34,22 @@ npx skills add psylch/tech-research-skill -g -y
 - **浏览器自动化**，用于 Grok（可选——不可用时自动跳过）：
   - **Claude-in-Chrome**（零配置，推荐），或
   - **Playwright MCP**（通过 `grok_setup.sh` 自动配置）
+- **Hermes Tweet / Xquik key**，用于结构化 X 证据（可选）：
+  - `XQUIK_API_KEY` 或 `HERMES_TWEET_API_KEY`
+  - 未设置时自动跳过
 - **DeepWiki MCP**，用于 GitHub 仓库分析（可选）
+
+### 可选 Xquik 数据源
+
+配置 Hermes Tweet/Xquik key 后，可以在不打开浏览器的情况下收集只读 X 证据：
+
+```bash
+python ~/.agents/skills/tech-research/scripts/xquik_source.py search "Claude Code workflows" --limit 8
+python ~/.agents/skills/tech-research/scripts/xquik_source.py trends --woeid 1 --limit 10
+```
+
+它适合快速获取推文证据、趋势线索，以及在 Grok 浏览器不可用时提供降级覆盖。
+Grok 仍然适合更丰富的总结和专家发现。
 
 ### Grok 浏览器后端
 
@@ -97,19 +113,19 @@ compare libraries: Vite vs Turbopack
 
 | 信号 | 模式 |
 |------|------|
-| 单一主题，多数据源 | **Light** — 最多 3 个并行 Task Subagent，各查一个数据源 |
+| 单一主题，多数据源 | **Light** — 最多 4 个并行 Task Subagent，各查一个数据源 |
 | 多个主题/竞品需要交叉比较 | **Heavy** — Agent Teammate，可互相通信、共享发现、避免重复 |
 | 调研过程可能需要动态调整范围 | **Heavy** |
 | agent 数量 ≥ 4 | **Heavy** |
 
-不是每次调研都需要全部 3 个数据源。skill 会根据问题类型选择：
+不是每次调研都需要全部数据源。skill 会根据问题类型选择：
 
-| 调研类型 | Grok | DeepWiki | WebSearch |
-|----------|------|----------|-----------|
-| "要不要用库 X？" | 是 | 是 | 是 |
-| "开发者怎么看 X？" | 是 | 否 | 可能 |
-| "仓库 X 内部怎么实现的？" | 否 | 是 | 可能 |
-| "X 和 Y 性能对比" | 可能 | 是（两个） | 是 |
+| 调研类型 | Xquik | Grok | DeepWiki | WebSearch |
+|----------|-------|------|----------|-----------|
+| "要不要用库 X？" | 可能 | 是 | 是 | 是 |
+| "开发者怎么看 X？" | 是 | 是 | 否 | 可能 |
+| "仓库 X 内部怎么实现的？" | 否 | 否 | 是 | 可能 |
+| "X 和 Y 性能对比" | 可能 | 可能 | 是（两个） | 是 |
 
 ## 关键设计决策
 
@@ -142,7 +158,8 @@ tech-research-skill/
 │       │   ├── subagent_templates.md # 各子 agent 的提示词模板
 │       │   └── query_strategies.md   # Grok 查询策略
 │       └── scripts/
-│           └── grok_setup.sh        # 后端检测、配置、登录状态管理
+│           ├── grok_setup.sh        # 后端检测、配置、登录状态管理
+│           └── xquik_source.py      # 可选结构化 X 证据数据源
 ├── README.md
 ├── README.zh.md
 └── LICENSE
