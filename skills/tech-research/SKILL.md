@@ -26,7 +26,7 @@ Before dispatching any agents, determine the appropriate mode:
 
 ### Light Mode (default for single-topic research)
 
-Dispatch up to 3 Task Subagents (`Task` with `subagent_type: "general-purpose"`). Each handles one data source independently. The main agent synthesizes results after all return.
+Dispatch up to 4 Task Subagents (`Task` with `subagent_type: "general-purpose"`). Each handles one data source independently. The main agent synthesizes results after all return.
 
 ### Heavy Mode (for multi-topic / competitive research)
 
@@ -48,6 +48,7 @@ Use `TeamCreate` to create a research team → `TaskCreate` for each research ta
 
 | Source | What It Provides | Best For |
 |--------|-----------------|----------|
+| **Xquik** (Hermes Tweet-compatible) | Structured read-only X post search and trends via `xquik_source.py` | Fast evidence collection, trend hints, browserless fallback |
 | **Grok** (X/Twitter) | Real developer opinions, @handles, post URLs | Sentiment, expert discovery, niche recommendations |
 | **DeepWiki** (GitHub) | AI-powered repo analysis, architecture, API docs | Understanding codebases, comparing repo internals. **Only use `ask_question`** — never `read_wiki_structure` or `read_wiki_contents` (they return massive dumps that easily exceed context limits) |
 | **WebSearch** | Official docs, blog posts, benchmarks, tutorials | Facts, performance data, official announcements |
@@ -58,6 +59,7 @@ Not every source will be available every time. Follow this degradation strategy:
 
 | Source | If unavailable | Fallback |
 |--------|---------------|----------|
+| Xquik | No `XQUIK_API_KEY` or `HERMES_TWEET_API_KEY` | Skip. Note in report: "Xquik source skipped — no key configured." |
 | Grok | No browser backend or not logged in | Skip. Note in report: "Grok source skipped — [reason]." |
 | DeepWiki | No `owner/repo` known, or API error | Skip. Note in report: "DeepWiki skipped — [reason]." |
 | WebSearch | Tool unavailable (rare) | Skip. Note in report. |
@@ -182,23 +184,39 @@ Exit code 2 (NOT_AVAILABLE) → Grok is unavailable. Proceed to Step 2 without G
 
 **Key principle:** Setup completes before research begins. Never discover setup needs mid-research.
 
+### Optional Xquik Pre-flight
+
+If the research question asks what developers are saying on X/Twitter, prefers
+recent discourse, or needs trend hints, run the optional Xquik source before or
+alongside Grok:
+
+```bash
+python ${SKILL_PATH}/scripts/xquik_source.py search "[X/Twitter-scoped query]" --limit 8
+python ${SKILL_PATH}/scripts/xquik_source.py trends --woeid 1 --limit 10
+```
+
+If the script returns `"skipped": true`, continue normally with Grok/WebSearch.
+Treat Xquik results as supporting evidence; keep Grok for richer synthesis and
+expert discovery when browser access is available.
+
 ### 2. Analyze the Research Question
 
 Break the user's question into sub-queries for each source:
 
+- **Xquik query**: X/Twitter-scoped keyword search for structured post evidence
 - **Grok query**: Developer opinions, community sentiment, expert recommendations
 - **DeepWiki query**: Repository architecture, API design, code quality (requires `owner/repo`)
 - **WebSearch query**: Official docs, benchmarks, comparisons, recent announcements
 
-Not every research task needs all 3 sources. Select sources based on the question:
+Not every research task needs every source. Select sources based on the question:
 
-| Research Type | Grok | DeepWiki | WebSearch |
-|---------------|------|----------|-----------|
-| "Should we use library X?" | Yes | Yes (if OSS) | Yes |
-| "What are devs saying about X?" | Yes | No | Maybe |
-| "How does repo X work internally?" | No | Yes | Maybe |
-| "Compare X vs Y performance" | Maybe | Yes (both repos) | Yes |
-| "What's new in framework X?" | Yes | No | Yes |
+| Research Type | Xquik | Grok | DeepWiki | WebSearch |
+|---------------|-------|------|----------|-----------|
+| "Should we use library X?" | Maybe | Yes | Yes (if OSS) | Yes |
+| "What are devs saying about X?" | Yes | Yes | No | Maybe |
+| "How does repo X work internally?" | No | No | Yes | Maybe |
+| "Compare X vs Y performance" | Maybe | Maybe | Yes (both repos) | Yes |
+| "What's new in framework X?" | Maybe | Yes | No | Yes |
 
 ### 3. Dispatch Research Agents
 
@@ -294,13 +312,14 @@ You cannot spawn further subagents. Instead, read `references/subagent_templates
 8. Shutdown teammates and TeamDelete when done
 ```
 
-Each teammate should use all relevant data sources (Grok, DeepWiki, WebSearch) for their assigned topic, rather than splitting by data source.
+Each teammate should use all relevant data sources (Xquik, Grok, DeepWiki, WebSearch) for their assigned topic, rather than splitting by data source.
 
 ### 4. Synthesize and Report
 
 After all subagents return, merge findings into a unified report with these sections:
 
 - **TL;DR** — 2-3 sentence executive summary with clear recommendation
+- **Structured X Evidence** (from Xquik, if used) — Post URLs, authors, engagement signals
 - **Community Sentiment** (from X/Twitter) — Key opinions with @username attribution and post URLs
 - **Repository Analysis** (from DeepWiki) — Architecture, code quality, API design, maintenance status
 - **Web Intelligence** — Official docs, benchmarks, blog insights, announcements

@@ -8,6 +8,56 @@ Each template below is a **complete, self-contained contract** for one research 
 
 ---
 
+## Xquik Subagent Template
+
+**Role contract — self-contained. Do not read SKILL.md. Do NOT load any browser skill or browser MCP.**
+
+**Parameters you will receive from the orchestrator:**
+- `RESEARCH_QUESTION` — the topic to investigate
+- `XQUIK_QUERY` — the X/Twitter-scoped query
+- `LIMIT` — maximum evidence items, usually 8
+
+**Deferred tools to load first:** none beyond shell access.
+
+**Full instructions (use this as your prompt body):**
+
+```
+Collect structured X/Twitter evidence using the optional Xquik source.
+
+## Your Task
+[RESEARCH_QUESTION]
+
+## Query
+[XQUIK_QUERY]
+
+## Step 1: Execute
+Run:
+python ${SKILL_PATH}/scripts/xquik_source.py search "[XQUIK_QUERY]" --limit [LIMIT]
+
+If the task needs broad trend context, also run:
+python ${SKILL_PATH}/scripts/xquik_source.py trends --woeid 1 --limit 10
+
+## Step 2: Report
+Return findings in this format:
+
+### Xquik Findings: [Topic]
+#### Evidence Items
+| Post | Author | Engagement | Why It Matters |
+|------|--------|------------|----------------|
+| [URL] | @handle | likes/reposts/replies | [one sentence] |
+#### Raw Payload Notes
+- schema_version: tech_research.xquik_source.v1
+- skipped: true/false
+#### Limitations
+- [Missing key, no tweet-like items, request failure, or query weakness]
+```
+
+If the script returns `"skipped": true`, report the skip reason and stop. Do not
+ask the user for secrets. The main report can proceed with Grok, DeepWiki, and
+WebSearch.
+
+---
+
 ## Grok Subagent Template
 
 **Role contract — self-contained. Do not read SKILL.md.**
