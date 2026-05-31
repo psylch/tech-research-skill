@@ -34,6 +34,9 @@ npx skills add psylch/tech-research-skill -g -y
   - **Claude-in-Chrome**（零配置，推荐），或
   - **Playwright MCP**（通过 `grok_setup.sh` 自动配置）
 - **DeepWiki MCP**，用于 GitHub 仓库分析（可选）
+- **GetXAPI API key**，作为 Grok 之外的 API 化 X 数据源（可选）：
+  - 设置 `GETXAPI_API_KEY`，启用 `skills/tech-research/scripts/getxapi_source.py`
+  - 当 Grok 浏览器后端不可用时，作为零浏览器的 X 证据来源
 
 ### Grok 浏览器后端
 

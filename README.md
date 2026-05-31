@@ -34,6 +34,9 @@ Restart Claude Code after installation.
   - **Claude-in-Chrome** (zero setup, recommended), or
   - **Playwright MCP** (auto-setup via `grok_setup.sh`)
 - **DeepWiki MCP** for GitHub repository analysis (optional)
+- **GetXAPI API key** for an API-driven X source alternative to Grok (optional):
+  - Set `GETXAPI_API_KEY` to enable `skills/tech-research/scripts/getxapi_source.py`
+  - Used as a no-browser X evidence source when Grok backends are unavailable
 
 ### Grok Browser Backend
 
